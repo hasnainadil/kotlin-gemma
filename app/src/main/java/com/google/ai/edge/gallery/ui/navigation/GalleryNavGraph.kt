@@ -50,10 +50,11 @@ import androidx.navigation.navArgument
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.TASK_LLM_ASK_AUDIO
 import com.google.ai.edge.gallery.data.TASK_LLM_ASK_IMAGE
+import com.google.ai.edge.gallery.data.TASK_LLM_CATTLE_ADVISOR
 import com.google.ai.edge.gallery.data.TASK_LLM_CHAT
+import com.google.ai.edge.gallery.data.TASK_LLM_DISEASE_SCANNING
 import com.google.ai.edge.gallery.data.TASK_LLM_FUNCTION_CALLING
 import com.google.ai.edge.gallery.data.TASK_LLM_PROMPT_LAB
-import com.google.ai.edge.gallery.data.TASK_LLM_DISEASE_SCANNING
 import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.data.TaskType
 import com.google.ai.edge.gallery.data.getModelByName
@@ -70,6 +71,9 @@ import com.google.ai.edge.gallery.ui.llmchat.LlmAskImageViewModel
 import com.google.ai.edge.gallery.ui.llmchat.LlmChatDestination
 import com.google.ai.edge.gallery.ui.llmchat.LlmChatScreen
 import com.google.ai.edge.gallery.ui.llmchat.LlmChatViewModel
+import com.google.ai.edge.gallery.ui.cattleadvisor.CattleAdvisorDestination
+import com.google.ai.edge.gallery.ui.cattleadvisor.CattleAdvisorScreen
+import com.google.ai.edge.gallery.ui.cattleadvisor.CattleAdvisorViewModel
 import com.google.ai.edge.gallery.ui.diseasescanning.DiseaseScanningDestination
 import com.google.ai.edge.gallery.ui.diseasescanning.DiseaseScanningScreen
 import com.google.ai.edge.gallery.ui.diseasescanning.DiseaseScanningViewModel
@@ -314,6 +318,26 @@ fun GalleryNavHost(
         )
       }
     }
+
+    // Cattle advisor.
+    composable(
+      route = "${CattleAdvisorDestination.route}/{modelName}",
+      arguments = listOf(navArgument("modelName") { type = NavType.StringType }),
+      enterTransition = { slideEnter() },
+      exitTransition = { slideExit() },
+    ) { backStackEntry ->
+      val viewModel: CattleAdvisorViewModel = hiltViewModel()
+
+      getModelFromNavigationParam(backStackEntry, TASK_LLM_CATTLE_ADVISOR)?.let { defaultModel ->
+        modelManagerViewModel.selectModel(defaultModel)
+
+        CattleAdvisorScreen(
+          viewModel = viewModel,
+          modelManagerViewModel = modelManagerViewModel,
+          navigateUp = { navController.navigateUp() },
+        )
+      }
+    }
   }
 
   // Handle incoming intents for deep links
@@ -348,6 +372,7 @@ fun navigateToTaskScreen(
     TaskType.LLM_ASK_AUDIO -> navController.navigate("${LlmAskAudioDestination.route}/${modelName}")
     TaskType.LLM_FUNCTION_CALLING -> navController.navigate("${FunctionCallingDestination.route}/${modelName}")
     TaskType.LLM_DISEASE_SCANNING -> navController.navigate("${DiseaseScanningDestination.route}/${modelName}")
+    TaskType.LLM_CATTLE_ADVISOR -> navController.navigate("${CattleAdvisorDestination.route}/${modelName}")
     TaskType.LLM_PROMPT_LAB ->
       navController.navigate("${LlmSingleTurnDestination.route}/${modelName}")
     TaskType.TEST_TASK_1 -> {}

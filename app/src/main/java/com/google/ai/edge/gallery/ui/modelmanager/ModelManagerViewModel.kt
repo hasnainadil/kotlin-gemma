@@ -294,7 +294,8 @@ constructor(
         TaskType.LLM_ASK_AUDIO,
         TaskType.LLM_PROMPT_LAB,
         TaskType.LLM_FUNCTION_CALLING,
-        TaskType.LLM_DISEASE_SCANNING ->
+        TaskType.LLM_DISEASE_SCANNING,
+        TaskType.LLM_CATTLE_ADVISOR ->
           LlmChatModelHelper.initialize(context = context, model = model, onDone = onDone)
 
         TaskType.TEST_TASK_1 -> {}
@@ -313,7 +314,8 @@ constructor(
         TaskType.LLM_ASK_IMAGE,
         TaskType.LLM_ASK_AUDIO,
         TaskType.LLM_FUNCTION_CALLING,
-        TaskType.LLM_DISEASE_SCANNING -> LlmChatModelHelper.cleanUp(model = model)
+        TaskType.LLM_DISEASE_SCANNING,
+        TaskType.LLM_CATTLE_ADVISOR -> LlmChatModelHelper.cleanUp(model = model)
 
         TaskType.TEST_TASK_1 -> {}
         TaskType.TEST_TASK_2 -> {}
@@ -652,11 +654,11 @@ constructor(
 
         // Try to read the test allowlist first.
         Log.d(TAG, "Loading test model allowlist.")
-        modelAllowlist = readModelAllowlistFromDisk(fileName = MODEL_ALLOWLIST_TEST_FILENAME)
+        modelAllowlist = null
         if (modelAllowlist == null) {
           // Load from github.
           val url =
-            "https://raw.githubusercontent.com/google-ai-edge/gallery/refs/heads/main/model_allowlists/${BuildConfig.VERSION_NAME.replace(".", "_")}.json"
+            "https://huggingface.co/Irtiaz/LoRa-DDX/raw/main/models.json"
           Log.d(TAG, "Loading model allowlist from internet. Url: $url")
           val data = getJsonResponse<ModelAllowlist>(url = url)
           modelAllowlist = data?.jsonObj
