@@ -652,6 +652,10 @@ constructor(
 
         // Try to read the test allowlist first.
         Log.d(TAG, "Loading test model allowlist.")
+        
+        // First try to copy test file from assets if it doesn't exist in external files
+        copyTestAllowlistFromAssetsIfNeeded()
+        
         modelAllowlist = readModelAllowlistFromDisk(fileName = MODEL_ALLOWLIST_TEST_FILENAME)
         if (modelAllowlist == null) {
           // Load from github.
@@ -685,6 +689,7 @@ constructor(
         TASK_LLM_ASK_IMAGE.models.clear()
         TASK_LLM_ASK_AUDIO.models.clear()
         TASK_LLM_FUNCTION_CALLING.models.clear()
+        TASK_LLM_DISEASE_SCANNING.models.clear()
         for (allowedModel in modelAllowlist.models) {
           if (allowedModel.disabled == true) {
             continue
@@ -759,6 +764,32 @@ constructor(
     }
 
     return null
+  }
+
+  private fun copyTestAllowlistFromAssetsIfNeeded() {
+    try {
+      val externalTestFile = File(externalFilesDir, MODEL_ALLOWLIST_TEST_FILENAME)
+      if (!externalTestFile.exists()) {
+        Log.d(TAG, "Test allowlist file doesn't exist in external files. Trying to copy from assets...")
+        
+        // Try to read from assets
+        try {
+          val inputStream = context.assets.open(MODEL_ALLOWLIST_TEST_FILENAME)
+          val content = inputStream.bufferedReader().use { it.readText() }
+          inputStream.close()
+          
+          // Write to external files directory
+          externalTestFile.writeText(content)
+          Log.d(TAG, "Successfully copied test allowlist from assets to external files")
+        } catch (e: Exception) {
+          Log.d(TAG, "No test allowlist found in assets, using default models")
+        }
+      } else {
+        Log.d(TAG, "Test allowlist already exists in external files")
+      }
+    } catch (e: Exception) {
+      Log.e(TAG, "Error copying test allowlist from assets", e)
+    }
   }
 
   private fun isModelPartiallyDownloaded(model: Model): Boolean {

@@ -1,0 +1,86 @@
+{
+  "models": [
+    {
+      "name": "Gemma-3n-E2B-it-int4",
+      "modelId": "google/gemma-3n-E2B-it-litert-preview",
+      "modelFile": "gemma-3n-E2B-it-int4.task",
+      "description": "Preview version of Gemma 3n E2B ready for deployment on Android using the MediaPipe LLM Inference API. The current checkpoint only supports text and vision input, with 4096 context length.",
+      "sizeInBytes": 3136226711,
+      "estimatedPeakMemoryInBytes": 5905580032,
+      "commitHash": "b2b54222ba849ee74ac9f88d6af2470b390afa9e",
+      "llmSupportImage": true,
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 1.0,
+        "maxTokens": 4096,
+        "accelerators": "cpu,gpu"
+      },
+      "taskTypes": ["llm_chat", "llm_prompt_lab", "llm_ask_image"],
+      "disabled": false
+    },
+    {
+      "name": "Gemma-3n-E4B-it-int4",
+      "modelId": "google/gemma-3n-E4B-it-litert-preview",
+      "modelFile": "gemma-3n-E4B-it-int4.task",
+      "description": "Preview version of Gemma 3n E4B ready for deployment on Android using the MediaPipe LLM Inference API. The current checkpoint only supports text and vision input, with 4096 context length.",
+      "sizeInBytes": 4405655031,
+      "estimatedPeakMemoryInBytes": 6979321856,
+      "commitHash": "1bb9b9c34cfe96536b5540699ffa07060e9fa124",
+      "llmSupportImage": true,
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 1.0,
+        "maxTokens": 4096,
+        "accelerators": "cpu,gpu"
+      },
+      "taskTypes": ["llm_chat", "llm_prompt_lab", "llm_ask_image"],
+      "disabled": false
+    },
+    {
+      "name": "Gemma3-1B-IT q4",
+      "modelId": "litert-community/Gemma3-1B-IT",
+      "modelFile": "Gemma3-1B-IT_multi-prefill-seq_q4_ekv2048.task",
+      "description": "A variant of google/Gemma-3-1B-IT with 4-bit quantization ready for deployment on Android using the MediaPipe LLM Inference API",
+      "sizeInBytes": 554661246,
+      "estimatedPeakMemoryInBytes": 2147483648,
+      "commitHash": "a1162a5674cd20452540a007dbe8d54e046d5f8b",
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 1.0,
+        "maxTokens": 1024,
+        "accelerators": "gpu,cpu"
+      },
+      "taskTypes": ["llm_chat", "llm_prompt_lab"],
+      "disabled": false
+    },
+    {
+      "name": "GlucoGuide - Gemma 2B IT (Fine-tuned)",
+      "modelId": "wonjunchoi/glucoguide-gemma-2b-it",
+      "modelFile": "model.tflite",
+      "description": "A fine-tuned Gemma 2B model specialized for providing food recommendations and nutritional guidance. Helps users make smarter food choices.",
+      "sizeInBytes": 2147483648,
+      "commitHash": "main",
+      "defaultConfig": {
+        "topK": 40,
+        "topP": 0.95,
+        "temperature": 0.7,
+        "accelerators": "gpu,cpu",
+        "maxTokens": 1024
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_ask_image",
+        "llm_function_calling",
+        "llm_disease_scanning"
+      ],
+      "disabled": false,
+      "llmSupportImage": true,
+      "llmSupportAudio": false,
+      "estimatedPeakMemoryInBytes": 3221225472
+    }
+  ]
+}
