@@ -39,6 +39,7 @@ import com.google.ai.edge.gallery.data.ModelDownloadStatusType
 import com.google.ai.edge.gallery.data.TASKS
 import com.google.ai.edge.gallery.data.TASK_LLM_ASK_AUDIO
 import com.google.ai.edge.gallery.data.TASK_LLM_ASK_IMAGE
+import com.google.ai.edge.gallery.data.TASK_LLM_CATTLE_ADVISOR
 import com.google.ai.edge.gallery.data.TASK_LLM_CHAT
 import com.google.ai.edge.gallery.data.TASK_LLM_FUNCTION_CALLING
 import com.google.ai.edge.gallery.data.TASK_LLM_PROMPT_LAB
@@ -48,6 +49,7 @@ import com.google.ai.edge.gallery.data.TaskType
 import com.google.ai.edge.gallery.data.createLlmChatConfigs
 import com.google.ai.edge.gallery.data.getModelByName
 import com.google.ai.edge.gallery.data.processTasks
+import com.google.ai.edge.gallery.nutrition.NutritionModelFactory
 import com.google.ai.edge.gallery.proto.AccessTokenData
 import com.google.ai.edge.gallery.proto.ImportedModel
 import com.google.ai.edge.gallery.proto.Theme
@@ -687,12 +689,17 @@ constructor(
         TASK_LLM_ASK_IMAGE.models.clear()
         TASK_LLM_ASK_AUDIO.models.clear()
         TASK_LLM_FUNCTION_CALLING.models.clear()
+        TASK_LLM_DISEASE_SCANNING.models.clear()
+        TASK_LLM_CATTLE_ADVISOR.models.clear()
+        
         for (allowedModel in modelAllowlist.models) {
           if (allowedModel.disabled == true) {
             continue
           }
 
           val model = allowedModel.toModel()
+          
+          // Add models to tasks based on their declared taskTypes
           if (allowedModel.taskTypes.contains(TASK_LLM_CHAT.type.id)) {
             TASK_LLM_CHAT.models.add(model)
           }
@@ -705,15 +712,39 @@ constructor(
           if (allowedModel.taskTypes.contains(TASK_LLM_ASK_AUDIO.type.id)) {
             TASK_LLM_ASK_AUDIO.models.add(model)
           }
-          // Add Gemma models to function calling task
-          if (model.name.lowercase().contains("gemma")) {
+          
+          // Add models to specialized tasks based on capabilities and name patterns
+          val modelNameLower = model.name.lowercase()
+          
+          // Add Gemma models to function calling, disease scanning, and cattle advisor tasks
+          if (modelNameLower.contains("gemma")) {
             TASK_LLM_FUNCTION_CALLING.models.add(model)
             TASK_LLM_DISEASE_SCANNING.models.add(model)
+            TASK_LLM_CATTLE_ADVISOR.models.add(model)
+          }
+          
+          // Add LoRa disease detection model to disease scanning task
+          if (modelNameLower.contains("lora") && modelNameLower.contains("ddx")) {
+            TASK_LLM_DISEASE_SCANNING.models.add(model)
+            // LoRa DDX is also good for cattle advisor as it's specialized for livestock
+            TASK_LLM_CATTLE_ADVISOR.models.add(model)
+          }
+          
+          // Add all image-capable models to disease scanning (since it's image-based analysis)
+          if (model.llmSupportImage) {
+            // Only add if not already added above
+            if (!TASK_LLM_DISEASE_SCANNING.models.contains(model)) {
+              TASK_LLM_DISEASE_SCANNING.models.add(model)
+            }
           }
         }
 
         // Pre-process all tasks.
         processTasks()
+        
+        // Add the nutrition model to cattle advisor task
+        val nutritionModel = NutritionModelFactory.createNutritionModel()
+        TASK_LLM_CATTLE_ADVISOR.models.add(0, nutritionModel) // Add at the beginning
 
         // Update UI state.
         val newUiState = createUiState()
@@ -793,7 +824,7 @@ constructor(
       // Create model.
       val model = createModelFromImportedModelInfo(info = importedModel)
 
-      // Add to task.
+      // Add to basic tasks.
       TASK_LLM_CHAT.models.add(model)
       TASK_LLM_PROMPT_LAB.models.add(model)
       if (model.llmSupportImage) {
@@ -802,9 +833,26 @@ constructor(
       if (model.llmSupportAudio) {
         TASK_LLM_ASK_AUDIO.models.add(model)
       }
-      // Add imported Gemma models to function calling task
-      if (model.name.lowercase().contains("gemma")) {
+      
+      // Add to specialized tasks based on model capabilities and name patterns
+      val modelNameLower = model.name.lowercase()
+      
+      // Add imported Gemma models to specialized tasks
+      if (modelNameLower.contains("gemma")) {
         TASK_LLM_FUNCTION_CALLING.models.add(model)
+        TASK_LLM_DISEASE_SCANNING.models.add(model)
+        TASK_LLM_CATTLE_ADVISOR.models.add(model)
+      }
+      
+      // Add imported LoRa disease detection model to disease scanning and cattle advisor
+      if (modelNameLower.contains("lora") && modelNameLower.contains("ddx")) {
+        TASK_LLM_DISEASE_SCANNING.models.add(model)
+        TASK_LLM_CATTLE_ADVISOR.models.add(model)
+      }
+      
+      // Add all image-capable imported models to disease scanning
+      if (model.llmSupportImage && !TASK_LLM_DISEASE_SCANNING.models.contains(model)) {
+        TASK_LLM_DISEASE_SCANNING.models.add(model)
       }
 
       // Update status.

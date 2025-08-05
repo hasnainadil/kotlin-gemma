@@ -58,8 +58,14 @@ fun CattleAdvisorScreen(
     val analysisResults = viewModel.analysisResults
     val isAnalyzing = viewModel.isAnalyzing
     val errorMessage = viewModel.errorMessage
+    val isNutritionServiceInitialized = viewModel.isNutritionServiceInitialized
     val modelManagerUiState by modelManagerViewModel.uiState.collectAsState()
     val currentModel = modelManagerUiState.selectedModel
+    
+    // Initialize nutrition service on first composition
+    LaunchedEffect(Unit) {
+        viewModel.initializeNutritionService(context)
+    }
     
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()

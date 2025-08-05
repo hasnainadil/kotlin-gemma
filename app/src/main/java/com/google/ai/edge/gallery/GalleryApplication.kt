@@ -37,6 +37,12 @@ class GalleryApplication : Application() {
     // Load saved theme.
     ThemeSettings.themeOverride.value = dataStoreRepository.readTheme()
 
-    FirebaseApp.initializeApp(this)
+    // Only initialize Firebase if properly configured
+    try {
+      FirebaseApp.initializeApp(this)
+    } catch (e: Exception) {
+      // Firebase initialization failed, likely due to missing google-services.json
+      android.util.Log.w("GalleryApplication", "Firebase initialization failed", e)
+    }
   }
 }
