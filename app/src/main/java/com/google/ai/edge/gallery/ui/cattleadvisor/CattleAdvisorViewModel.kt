@@ -90,7 +90,9 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
         
         // Initialize nutrition service if not already initialized
         if (!isNutritionServiceInitialized) {
+            errorMessage = "Initializing nutrition models..."
             initializeNutritionService(context)
+            return
         }
         
         // Validate inputs using nutrition service
