@@ -28,6 +28,7 @@ import com.google.ai.edge.gallery.data.TASK_LLM_CATTLE_ADVISOR
 import com.google.ai.edge.gallery.nutrition.CattleNutritionService
 import com.google.ai.edge.gallery.nutrition.NutritionModelFactory
 import com.google.ai.edge.gallery.ui.llmchat.LlmChatModelHelper
+import com.google.ai.edge.gallery.ui.llmchat.LlmModelInstance
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -154,7 +155,8 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
                                     "P (grams)" to nutritionPrediction.pGrams
                                 )
                                 
-                                // Use AI enhancement with LoRa LLM and nutrition predictions
+                                // Use LoRa AI enhancement with nutrition predictions
+                                // Clean workflow: Nutrition Model → Prompt → LoRa Model → Enhanced Result
                                 enhanceWithLoRaLLM(
                                     context = context,
                                     baseRecommendation = analysisResult.formattedAnalysis,
@@ -217,34 +219,73 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
         model: Model
     ) {
         try {
-            // Initialize the AI model if it's not already initialized
-            if (model.instance == null) {
+            // Clean workflow: Always use LoRa model for cattle advisor
+            // Find the LoRa DDX model specifically (specialized for livestock)
+            val loraModel = TASK_LLM_CATTLE_ADVISOR.models.find { 
+                !NutritionModelFactory.isNutritionModel(it) && 
+                it.name.lowercase().contains("lora") && 
+                it.name.lowercase().contains("ddx")
+            }
+            
+            if (loraModel == null) {
+                Log.w(TAG, "LoRa DDX model not found in cattle advisor task")
+                throw IllegalStateException("LoRa DDX model not available for AI enhancement")
+            }
+            
+            Log.d(TAG, "Using LoRa model '${loraModel.name}' for AI enhancement")
+            
+            // Check if the LoRa model is actually downloaded first
+            val downloadStatus = modelManagerViewModel.uiState.value.modelDownloadStatus[loraModel.name]
+            if (downloadStatus?.status != com.google.ai.edge.gallery.data.ModelDownloadStatusType.SUCCEEDED) {
+                Log.w(TAG, "LoRa model '${loraModel.name}' is not downloaded yet. Download status: ${downloadStatus?.status}")
+                throw IllegalStateException("LoRa model not downloaded - please download the model first from the model management screen")
+            }
+            
+            // Initialize the LoRa model if it's not already initialized
+            if (loraModel.instance == null || loraModel.instance !is LlmModelInstance) {
+                Log.d(TAG, "Initializing LoRa model '${loraModel.name}' for cattle advisor...")
                 modelManagerViewModel.initializeModel(
                     context = context,
                     task = TASK_LLM_CATTLE_ADVISOR,
-                    model = model
+                    model = loraModel
                 )
                 
-                // Wait for the model to be initialized
-                while (model.instance == null) {
+                // Wait for the model to be initialized with proper type checking
+                var attempts = 0
+                val maxAttempts = 100 // 10 seconds timeout
+                while ((loraModel.instance == null || loraModel.instance !is LlmModelInstance) && attempts < maxAttempts) {
                     kotlinx.coroutines.delay(100)
+                    attempts++
+                }
+                
+                // Check if initialization was successful
+                if (loraModel.instance == null || loraModel.instance !is LlmModelInstance) {
+                    Log.w(TAG, "LoRa model '${loraModel.name}' initialization failed or timed out")
+                    throw IllegalStateException("LoRa model initialization failed")
                 }
             }
             
-            // Create feed recommendation prompt based on Python implementation
+            // Verify model instance type before using
+            if (loraModel.instance !is LlmModelInstance) {
+                Log.w(TAG, "Model instance is not of type LlmModelInstance: ${loraModel.instance?.javaClass?.simpleName}")
+                throw IllegalStateException("Invalid model instance type")
+            }
+            
+            // Create feed recommendation prompt based on nutrition predictions
+            // This is the clean workflow: Nutrition Model → Prompt → LoRa Model → Enhanced Result
             val feedRecommendationPrompt = createFeedRecommendationPrompt(nutritionPredictions)
             
-            Log.d(TAG, "Sending feed recommendation prompt to LoRa LLM")
+            Log.d(TAG, "Sending nutrition-based prompt to LoRa model '${loraModel.name}'")
 
             LlmChatModelHelper.runInference(
-                model = model,
+                model = loraModel,
                 input = feedRecommendationPrompt,
                 resultListener = { partialResult, done ->
-                    // Update the loading result with LoRa LLM response
+                    // Update the loading result with LoRa enhanced response
                     val combinedRecommendation = if (done) {
-                        baseRecommendation + "\n\n## Feed Recommendation\n\n" + partialResult
+                        baseRecommendation + "\n\n## LoRa AI-Enhanced Feed Recommendations\n\n" + partialResult
                     } else {
-                        baseRecommendation + "\n\n## Feed Recommendation\n\n" + partialResult
+                        baseRecommendation + "\n\n## LoRa AI-Enhanced Feed Recommendations\n\n" + partialResult
                     }
                     
                     updateAnalysisResult(
@@ -258,7 +299,7 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
                     
                     if (done) {
                         isAnalyzing = false
-                        Log.d(TAG, "LoRa LLM feed recommendation completed")
+                        Log.d(TAG, "LoRa model '${loraModel.name}' feed recommendation completed")
                     }
                 },
                 cleanUpListener = {
@@ -266,17 +307,17 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
                 }
             )
         } catch (e: Exception) {
-            // Fallback to base recommendation if LLM enhancement fails
+            // Fallback to base recommendation if LoRa enhancement fails
             updateAnalysisResult(
                 cattleType = cattleType,
                 targetWeight = targetWeight,
                 bodyWeight = bodyWeight,
                 averageDailyGain = averageDailyGain,
-                recommendation = baseRecommendation + "\n\n*Note: Feed recommendation enhancement unavailable*",
+                recommendation = baseRecommendation + "\n\n*Note: LoRa AI-enhanced feed recommendations unavailable. Showing scientific nutrition analysis only.*",
                 isLoading = false
             )
             isAnalyzing = false
-            Log.w(TAG, "LoRa LLM enhancement failed, using base recommendation", e)
+            Log.w(TAG, "LoRa AI enhancement failed, using base recommendation (${e.message})", e)
         }
     }
     

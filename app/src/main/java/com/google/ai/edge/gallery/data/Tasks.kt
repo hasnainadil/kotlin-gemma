@@ -155,7 +155,7 @@ val TASK_LLM_CATTLE_ADVISOR =
     type = TaskType.LLM_CATTLE_ADVISOR,
     icon = Icons.Outlined.Pets,
     models = mutableListOf(),
-    description = "Get expert cattle nutrition advice and feeding recommendations",
+    description = "Scientific cattle nutrition analysis enhanced by LoRa AI for personalized feed recommendations",
     docUrl = "https://ai.google.dev/edge/mediapipe/solutions/genai/llm_inference/android",
     sourceCodeUrl =
       "https://github.com/google-ai-edge/gallery/blob/main/Android/src/app/src/main/java/com/google/ai/edge/gallery/ui/cattleadvisor/CattleAdvisorViewModel.kt",

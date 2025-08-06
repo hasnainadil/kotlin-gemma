@@ -100,7 +100,18 @@ object LlmChatModelHelper {
     try {
       Log.d(TAG, "Resetting session for model '${model.name}'")
 
-      val instance = model.instance as LlmModelInstance? ?: return
+      // Safety check: ensure model.instance is of the correct type
+      if (model.instance == null) {
+        Log.w(TAG, "Model instance is null during reset for model: ${model.name}")
+        return
+      }
+      
+      if (model.instance !is LlmModelInstance) {
+        Log.w(TAG, "Model instance is not of type LlmModelInstance during reset for model: ${model.name}. Actual type: ${model.instance?.javaClass?.simpleName}")
+        return
+      }
+
+      val instance = model.instance as LlmModelInstance
       val session = instance.session
       session.close()
 
@@ -135,6 +146,19 @@ object LlmChatModelHelper {
       return
     }
 
+    // Safety check: ensure model.instance is of the correct type before casting
+    if (model.instance !is LlmModelInstance) {
+      Log.w(TAG, "Model instance is not of type LlmModelInstance during cleanup for model: ${model.name}. Actual type: ${model.instance?.javaClass?.simpleName}")
+      // Still clean up the listeners and null the instance
+      val onCleanUp = cleanUpListeners.remove(model.name)
+      if (onCleanUp != null) {
+        onCleanUp()
+      }
+      model.instance = null
+      Log.d(TAG, "Cleanup completed with type mismatch.")
+      return
+    }
+
     val instance = model.instance as LlmModelInstance
 
     try {
@@ -165,6 +189,21 @@ object LlmChatModelHelper {
     images: List<Bitmap> = listOf(),
     audioClips: List<ByteArray> = listOf(),
   ) {
+    // Safety check: ensure model.instance is of the correct type
+    if (model.instance == null) {
+      Log.e(TAG, "Model instance is null for model: ${model.name}")
+      resultListener("Error: Model not initialized", true)
+      cleanUpListener()
+      return
+    }
+    
+    if (model.instance !is LlmModelInstance) {
+      Log.e(TAG, "Model instance is not of type LlmModelInstance for model: ${model.name}. Actual type: ${model.instance?.javaClass?.simpleName}")
+      resultListener("Error: Invalid model instance type", true)
+      cleanUpListener()
+      return
+    }
+    
     val instance = model.instance as LlmModelInstance
 
     // Set listener.
