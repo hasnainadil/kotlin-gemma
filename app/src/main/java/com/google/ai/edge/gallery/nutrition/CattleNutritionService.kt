@@ -239,7 +239,9 @@ class CattleNutritionService private constructor() {
             adg = averageDailyGain
         )
         
-        return predictNutrition(params)
+        val prediction = predictNutrition(params)
+        Log.d("API Call", "Nutrition prediction response: $prediction")
+        return prediction
     }
     
     data class ValidationResult(

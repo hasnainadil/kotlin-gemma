@@ -20,10 +20,18 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.collectAsState
@@ -40,6 +48,7 @@ import com.google.ai.edge.gallery.data.AppBarAction
 import com.google.ai.edge.gallery.data.AppBarActionType
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
 import com.google.ai.edge.gallery.ui.common.ConfigDialog
+import com.google.ai.edge.gallery.ui.common.MarkdownText
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -55,26 +64,26 @@ fun CattleAdvisorScreen(
     val isAnalyzing = viewModel.isAnalyzing
     val errorMessage = viewModel.errorMessage
     val isNutritionServiceInitialized = viewModel.isNutritionServiceInitialized
-    
+
     // Initialize nutrition service on first composition
     LaunchedEffect(Unit) {
         viewModel.initializeNutritionService(context)
     }
-    
+
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
-    
+
     // Input states
     var selectedCattleType by remember { mutableStateOf("") }
     var targetWeight by remember { mutableStateOf("") }
     var bodyWeight by remember { mutableStateOf("") }
     var averageDailyGain by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf(false) }
-    
+
     // Cattle types from Python code
     val cattleTypes = listOf(
         "Growing Steer/Heifer",
-        "Growing Yearlings", 
+        "Growing Yearlings",
         "Growing Mature Bulls"
     )
 
@@ -95,11 +104,13 @@ fun CattleAdvisorScreen(
                 .padding(paddingValues)
                 .padding(16.dp)
         ) {
-            // Input form
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-            ) {
+            // Show input form only when no analysis results
+            if (analysisResults.isEmpty()) {
+                // Input form
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                ) {
                 Column(
                     modifier = Modifier.padding(16.dp)
                 ) {
@@ -108,9 +119,9 @@ fun CattleAdvisorScreen(
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold
                     )
-                    
+
                     Spacer(modifier = Modifier.height(16.dp))
-                    
+
                     // Cattle Type Dropdown
                     ExposedDropdownMenuBox(
                         expanded = expanded,
@@ -143,9 +154,9 @@ fun CattleAdvisorScreen(
                             }
                         }
                     }
-                    
+
                     Spacer(modifier = Modifier.height(12.dp))
-                    
+
                     // Target Weight
                     OutlinedTextField(
                         value = targetWeight,
@@ -155,9 +166,9 @@ fun CattleAdvisorScreen(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         singleLine = true
                     )
-                    
+
                     Spacer(modifier = Modifier.height(12.dp))
-                    
+
                     // Current Body Weight
                     OutlinedTextField(
                         value = bodyWeight,
@@ -167,9 +178,9 @@ fun CattleAdvisorScreen(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         singleLine = true
                     )
-                    
+
                     Spacer(modifier = Modifier.height(12.dp))
-                    
+
                     // Average Daily Gain
                     OutlinedTextField(
                         value = averageDailyGain,
@@ -179,9 +190,9 @@ fun CattleAdvisorScreen(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         singleLine = true
                     )
-                    
+
                     Spacer(modifier = Modifier.height(16.dp))
-                    
+
                     // Analyze button - no model selection needed
                     Button(
                         onClick = {
@@ -189,7 +200,7 @@ fun CattleAdvisorScreen(
                             val targetWeightValue = targetWeight.toDoubleOrNull() ?: 0.0
                             val bodyWeightValue = bodyWeight.toDoubleOrNull() ?: 0.0
                             val adgValue = averageDailyGain.toDoubleOrNull() ?: 0.0
-                            
+
                             // Direct analysis without model selection
                             viewModel.analyzeNutrition(
                                 context = context,
@@ -222,7 +233,8 @@ fun CattleAdvisorScreen(
                     }
                 }
             }
-            
+            }
+
             // Error message
             errorMessage?.let { error ->
                 Spacer(modifier = Modifier.height(8.dp))
@@ -237,27 +249,33 @@ fun CattleAdvisorScreen(
                     )
                 }
             }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // Results
+
+            // Show results in full screen when available
             if (analysisResults.isNotEmpty()) {
-                Text(
-                    text = "Nutrition Analysis Results",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                LazyColumn(
-                    state = listState,
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxSize()
+                // New Analysis button when results exist
+                Button(
+                    onClick = {
+                        viewModel.clearResults() // Add this method to clear results and show form again
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.secondary
+                    )
                 ) {
-                    items(analysisResults.reversed()) { result ->
-                        CattleAdvisorResultCard(result = result)
-                    }
+                    Icon(
+                        Icons.Default.Analytics,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("New Analysis")
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Show latest result in full screen mode
+                analysisResults.lastOrNull()?.let { latestResult ->
+                    FullScreenAnalysisCard(result = latestResult)
                 }
             }
         }
@@ -278,8 +296,18 @@ private fun CattleAdvisorResultCard(
     result: CattleAdvisorResult,
     modifier: Modifier = Modifier
 ) {
+    var showFullScreen by remember { mutableStateOf(false) }
+    
+    if (showFullScreen) {
+        FullScreenAnalysisDialog(
+            result = result,
+            onDismiss = { showFullScreen = false }
+        )
+    }
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable { showFullScreen = true },
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
@@ -324,6 +352,16 @@ private fun CattleAdvisorResultCard(
             
             Spacer(modifier = Modifier.height(12.dp))
             
+            // Recommendation Header
+            Text(
+                text = "🐄 Nutrition Recommendation",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
             // Recommendation
             if (result.isLoading) {
                 Row(
@@ -342,23 +380,463 @@ private fun CattleAdvisorResultCard(
                 }
                 if (result.recommendation.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = result.recommendation,
-                        style = MaterialTheme.typography.bodyMedium,
+                    Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 400.dp)
-                    )
+                            .heightIn(min = 150.dp, max = 400.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
+                        )
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                        ) {
+                            MarkdownText(
+                                text = result.recommendation,
+                                modifier = Modifier
+                                    .padding(14.dp)
+                                    .fillMaxWidth(),
+                                smallFontSize = true
+                            )
+                        }
+                    }
                 }
             } else {
-                Text(
-                    text = result.recommendation,
-                    style = MaterialTheme.typography.bodyMedium,
+                // Use a Card with better styling for the final result
+                Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 400.dp)
-                )
+                        .heightIn(min = 200.dp, max = 600.dp), // Allow more height for tables
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                    )
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        MarkdownText(
+                            text = result.recommendation,
+                            modifier = Modifier
+                                .padding(16.dp) // Increased padding for better readability
+                                .fillMaxWidth(), // Use fillMaxWidth instead of wrapContentSize
+                            smallFontSize = false
+                        )
+                    }
+                }
             }
         }
     }
 }
+
+@Composable
+private fun FullScreenAnalysisCard(
+    result: CattleAdvisorResult,
+    modifier: Modifier = Modifier
+) {
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(24.dp)
+    ) {
+        // Header Card with Cattle Information
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Start,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Analytics,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(32.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = result.cattleType,
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // Cattle Stats in a beautiful grid
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        CattleStatCard(
+                            label = "Current Weight",
+                            value = "${result.bodyWeight} lbs",
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                        CattleStatCard(
+                            label = "Target Weight",
+                            value = "${result.targetWeight} lbs",
+                            color = MaterialTheme.colorScheme.tertiary
+                        )
+                        CattleStatCard(
+                            label = "Daily Gain",
+                            value = "${result.averageDailyGain} lbs/day",
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            }
+        }
+
+        // Recommendation Content
+        item {
+            if (result.isLoading) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(48.dp),
+                            strokeWidth = 4.dp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Analyzing nutrition requirements...",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            textAlign = TextAlign.Center
+                        )
+                        if (result.recommendation.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(24.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState())
+                            ) {
+                                MarkdownText(
+                                    text = result.recommendation,
+                                    modifier = Modifier
+                                        .widthIn(min = 300.dp, max = 1000.dp)
+                                        .wrapContentWidth(),
+                                    smallFontSize = false
+                                )
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Final recommendation in beautiful format
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp)
+                    ) {
+                        // Title with icon
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "🐄",
+                                style = MaterialTheme.typography.headlineLarge
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = "Nutrition Recommendations",
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        // Content with better formatting and horizontal scroll for tables
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
+                        ) {
+                            MarkdownText(
+                                text = result.recommendation,
+                                modifier = Modifier
+                                    .widthIn(min = 300.dp, max = 1000.dp) // Increased max width for better table display
+                                    .wrapContentWidth(),
+                                smallFontSize = false
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FullScreenAnalysisDialog(
+    result: CattleAdvisorResult,
+    onDismiss: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface)
+    ) {
+        // Top App Bar
+        TopAppBar(
+            title = {
+                Text(
+                    text = "Nutrition Analysis",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            navigationIcon = {
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            },
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = MaterialTheme.colorScheme.surface,
+                titleContentColor = MaterialTheme.colorScheme.primary
+            )
+        )
+
+        // Content
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = 64.dp), // Account for top bar
+            contentPadding = PaddingValues(24.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
+            // Header Card with Cattle Information
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Start,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Analytics,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(32.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = result.cattleType,
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        // Cattle Stats in a beautiful grid
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly
+                        ) {
+                            CattleStatCard(
+                                label = "Current Weight",
+                                value = "${result.bodyWeight} lbs",
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                            CattleStatCard(
+                                label = "Target Weight",
+                                value = "${result.targetWeight} lbs",
+                                color = MaterialTheme.colorScheme.tertiary
+                            )
+                            CattleStatCard(
+                                label = "Daily Gain",
+                                value = "${result.averageDailyGain} lbs/day",
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Recommendation Content
+            item {
+                if (result.isLoading) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(48.dp),
+                                strokeWidth = 4.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "Analyzing nutrition requirements...",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                textAlign = TextAlign.Center
+                            )
+                            if (result.recommendation.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(24.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState())
+                                ) {
+                                    MarkdownText(
+                                        text = result.recommendation,
+                                        modifier = Modifier
+                                            .widthIn(min = 300.dp, max = 800.dp)
+                                            .wrapContentWidth(),
+                                        smallFontSize = false
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Final recommendation in beautiful format
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp)
+                        ) {
+                            // Title with icon
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = "🐄",
+                                    style = MaterialTheme.typography.headlineLarge
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = "Nutrition Recommendations",
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(20.dp))
+
+                            // Content with better formatting and horizontal scroll for tables
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState())
+                            ) {
+                                MarkdownText(
+                                    text = result.recommendation,
+                                    modifier = Modifier
+                                        .widthIn(min = 300.dp, max = 800.dp)
+                                        .wrapContentWidth(),
+                                    smallFontSize = false
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CattleStatCard(
+    label: String,
+    value: String,
+    color: androidx.compose.ui.graphics.Color
+) {
+    Card(
+        modifier = Modifier.width(110.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = color.copy(alpha = 0.1f)
+        ),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                color = color,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
