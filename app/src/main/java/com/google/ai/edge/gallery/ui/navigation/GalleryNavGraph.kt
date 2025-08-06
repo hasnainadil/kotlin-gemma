@@ -156,12 +156,22 @@ fun GalleryNavHost(
     modelManagerViewModel = modelManagerViewModel,
     tosViewModel = hiltViewModel(),
     navigateToTaskScreen = { task ->
-      pickedTask = task
-      showModelManager = true
-      firebaseAnalytics?.logEvent(
-        "capability_select",
-        bundleOf("capability_name" to task.type.toString()),
-      )
+      // Special handling for Cattle Advisor - skip model selection
+      if (task.type == TaskType.LLM_CATTLE_ADVISOR) {
+        navController.navigate(CattleAdvisorDestination.route)
+        firebaseAnalytics?.logEvent(
+          "capability_select",
+          bundleOf("capability_name" to task.type.toString()),
+        )
+      } else {
+        // For all other tasks, show model manager first
+        pickedTask = task
+        showModelManager = true
+        firebaseAnalytics?.logEvent(
+          "capability_select",
+          bundleOf("capability_name" to task.type.toString()),
+        )
+      }
     },
   )
 
@@ -321,22 +331,17 @@ fun GalleryNavHost(
 
     // Cattle advisor.
     composable(
-      route = "${CattleAdvisorDestination.route}/{modelName}",
-      arguments = listOf(navArgument("modelName") { type = NavType.StringType }),
+      route = CattleAdvisorDestination.route,
       enterTransition = { slideEnter() },
       exitTransition = { slideExit() },
     ) { backStackEntry ->
       val viewModel: CattleAdvisorViewModel = hiltViewModel()
 
-      getModelFromNavigationParam(backStackEntry, TASK_LLM_CATTLE_ADVISOR)?.let { defaultModel ->
-        modelManagerViewModel.selectModel(defaultModel)
-
-        CattleAdvisorScreen(
-          viewModel = viewModel,
-          modelManagerViewModel = modelManagerViewModel,
-          navigateUp = { navController.navigateUp() },
-        )
-      }
+      CattleAdvisorScreen(
+        viewModel = viewModel,
+        modelManagerViewModel = modelManagerViewModel,
+        navigateUp = { navController.navigateUp() },
+      )
     }
   }
 
@@ -372,7 +377,7 @@ fun navigateToTaskScreen(
     TaskType.LLM_ASK_AUDIO -> navController.navigate("${LlmAskAudioDestination.route}/${modelName}")
     TaskType.LLM_FUNCTION_CALLING -> navController.navigate("${FunctionCallingDestination.route}/${modelName}")
     TaskType.LLM_DISEASE_SCANNING -> navController.navigate("${DiseaseScanningDestination.route}/${modelName}")
-    TaskType.LLM_CATTLE_ADVISOR -> navController.navigate("${CattleAdvisorDestination.route}/${modelName}")
+    TaskType.LLM_CATTLE_ADVISOR -> navController.navigate(CattleAdvisorDestination.route)
     TaskType.LLM_PROMPT_LAB ->
       navController.navigate("${LlmSingleTurnDestination.route}/${modelName}")
     TaskType.TEST_TASK_1 -> {}

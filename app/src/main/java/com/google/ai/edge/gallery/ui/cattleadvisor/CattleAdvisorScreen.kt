@@ -55,8 +55,6 @@ fun CattleAdvisorScreen(
     val isAnalyzing = viewModel.isAnalyzing
     val errorMessage = viewModel.errorMessage
     val isNutritionServiceInitialized = viewModel.isNutritionServiceInitialized
-    val modelManagerUiState by modelManagerViewModel.uiState.collectAsState()
-    val currentModel = modelManagerUiState.selectedModel
     
     // Initialize nutrition service on first composition
     LaunchedEffect(Unit) {
@@ -65,9 +63,6 @@ fun CattleAdvisorScreen(
     
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
-    
-    // State for configuration dialog
-    var showConfigDialog by remember { mutableStateOf(false) }
     
     // Input states
     var selectedCattleType by remember { mutableStateOf("") }
@@ -92,20 +87,6 @@ fun CattleAdvisorScreen(
                     actionFn = navigateUp
                 )
             )
-        },
-        floatingActionButton = {
-            // Settings FAB when model is available
-            currentModel?.let {
-                FloatingActionButton(
-                    onClick = { showConfigDialog = true },
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Icon(
-                        Icons.Default.Settings,
-                        contentDescription = "Model settings"
-                    )
-                }
-            }
         }
     ) { paddingValues ->
         Column(
@@ -201,7 +182,7 @@ fun CattleAdvisorScreen(
                     
                     Spacer(modifier = Modifier.height(16.dp))
                     
-                    // Analyze button
+                    // Analyze button - no model selection needed
                     Button(
                         onClick = {
                             viewModel.clearError()
@@ -209,20 +190,18 @@ fun CattleAdvisorScreen(
                             val bodyWeightValue = bodyWeight.toDoubleOrNull() ?: 0.0
                             val adgValue = averageDailyGain.toDoubleOrNull() ?: 0.0
                             
-                            currentModel?.let { model ->
-                                viewModel.analyzeNutrition(
-                                    context = context,
-                                    cattleType = selectedCattleType,
-                                    targetWeight = targetWeightValue,
-                                    bodyWeight = bodyWeightValue,
-                                    averageDailyGain = adgValue,
-                                    modelManagerViewModel = modelManagerViewModel,
-                                    model = model
-                                )
-                            }
+                            // Direct analysis without model selection
+                            viewModel.analyzeNutrition(
+                                context = context,
+                                cattleType = selectedCattleType,
+                                targetWeight = targetWeightValue,
+                                bodyWeight = bodyWeightValue,
+                                averageDailyGain = adgValue,
+                                modelManagerViewModel = modelManagerViewModel
+                            )
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = !isAnalyzing && currentModel != null
+                        enabled = !isAnalyzing && isNutritionServiceInitialized
                     ) {
                         if (isAnalyzing) {
                             CircularProgressIndicator(
@@ -282,21 +261,6 @@ fun CattleAdvisorScreen(
                 }
             }
         }
-    }
-    
-    // Configuration dialog
-    if (showConfigDialog && currentModel != null) {
-        ConfigDialog(
-            title = "Model Configuration",
-            configs = currentModel.configs,
-            initialValues = currentModel.configValues,
-            onDismissed = { showConfigDialog = false },
-            onOk = { newConfigValues ->
-                showConfigDialog = false
-                // Update model configuration
-                currentModel.configValues = newConfigValues
-            }
-        )
     }
     
     // Auto-scroll to latest result

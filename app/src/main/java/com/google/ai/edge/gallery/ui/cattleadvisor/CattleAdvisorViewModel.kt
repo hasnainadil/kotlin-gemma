@@ -64,6 +64,10 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
     var isNutritionServiceInitialized by mutableStateOf(false)
         private set
 
+    fun clearError() {
+        errorMessage = null
+    }
+
     fun initializeNutritionService(context: Context) {
         if (!isNutritionServiceInitialized) {
             viewModelScope.launch(Dispatchers.IO) {
@@ -81,11 +85,9 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
         targetWeight: Double,
         bodyWeight: Double,
         averageDailyGain: Double,
-        modelManagerViewModel: ModelManagerViewModel,
-        model: Model,
-        useAIEnhancement: Boolean = true // Enable AI enhancement with LoRa LLM
+        modelManagerViewModel: ModelManagerViewModel
     ) {
-        Log.d(TAG, "Starting cattle nutrition analysis")
+        Log.d(TAG, "Starting cattle nutrition analysis - no model selection required")
         
         errorMessage = null
         
@@ -118,7 +120,7 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
         
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                // Get nutrition analysis from the nutrition service
+                // Step 1: Get nutrition analysis from the nutrition service (no model selection needed)
                 val analysisResult = nutritionService.getNutritionAnalysis(
                     cattleType = cattleType,
                     targetWeight = targetWeight,
@@ -128,65 +130,61 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
                 
                 when (analysisResult) {
                     is CattleNutritionService.NutritionAnalysisResult.Success -> {
-                        if (useAIEnhancement) {
-                            // Get the raw nutrition predictions for LLM prompt
-                            val nutritionPrediction = nutritionService.getNutritionPrediction(
+                        // Update with nutrition model results first
+                        updateAnalysisResult(
+                            cattleType = cattleType,
+                            targetWeight = targetWeight,
+                            bodyWeight = bodyWeight,
+                            averageDailyGain = averageDailyGain,
+                            recommendation = "## Nutrition Model Analysis\n\n${analysisResult.formattedAnalysis}\n\n---\n\n## LoRA Model Enhancement\n\nGenerating enhanced recommendations...",
+                            isLoading = true
+                        )
+                        
+                        // Step 2: Get raw nutrition predictions for LoRA prompt
+                        val nutritionPrediction = nutritionService.getNutritionPrediction(
+                            cattleType = cattleType,
+                            targetWeight = targetWeight,
+                            bodyWeight = bodyWeight,
+                            averageDailyGain = averageDailyGain
+                        )
+                        
+                        if (nutritionPrediction != null) {
+                            // Convert NutritionPrediction to Map format for prompt
+                            val nutritionPredictions = mapOf(
+                                "DM Intake (lbs/day)" to nutritionPrediction.dryMatterIntake,
+                                "TDN (% DM)" to nutritionPrediction.tdnPercentage,
+                                "TDN (lbs)" to nutritionPrediction.tdnLbs,
+                                "NEm (Mcal/lb)" to nutritionPrediction.nemPerLb,
+                                "NEm (Mcal)" to nutritionPrediction.nemMcal,
+                                "NEg (Mcal/lb)" to nutritionPrediction.negPerLb,
+                                "NEg (Mcal)" to nutritionPrediction.negMcal,
+                                "CP (% DM)" to nutritionPrediction.cpPercentage,
+                                "CP (lbs)" to nutritionPrediction.cpLbs,
+                                "Ca (%DM)" to nutritionPrediction.caPercentage,
+                                "Ca (grams)" to nutritionPrediction.caGrams,
+                                "P (% DM)" to nutritionPrediction.pPercentage,
+                                "P (grams)" to nutritionPrediction.pGrams
+                            )
+                            
+                            // Step 3: Enhance with LoRa LLM using nutrition predictions as prompt
+                            enhanceWithLoRaLLM(
+                                context = context,
+                                baseRecommendation = analysisResult.formattedAnalysis,
+                                nutritionPredictions = nutritionPredictions,
                                 cattleType = cattleType,
                                 targetWeight = targetWeight,
                                 bodyWeight = bodyWeight,
-                                averageDailyGain = averageDailyGain
+                                averageDailyGain = averageDailyGain,
+                                modelManagerViewModel = modelManagerViewModel
                             )
-                            
-                            if (nutritionPrediction != null) {
-                                // Convert NutritionPrediction to Map format for prompt
-                                val nutritionPredictions = mapOf(
-                                    "DM Intake (lbs/day)" to nutritionPrediction.dryMatterIntake,
-                                    "TDN (% DM)" to nutritionPrediction.tdnPercentage,
-                                    "TDN (lbs)" to nutritionPrediction.tdnLbs,
-                                    "NEm (Mcal/lb)" to nutritionPrediction.nemPerLb,
-                                    "NEm (Mcal)" to nutritionPrediction.nemMcal,
-                                    "NEg (Mcal/lb)" to nutritionPrediction.negPerLb,
-                                    "NEg (Mcal)" to nutritionPrediction.negMcal,
-                                    "CP (% DM)" to nutritionPrediction.cpPercentage,
-                                    "CP (lbs)" to nutritionPrediction.cpLbs,
-                                    "Ca (%DM)" to nutritionPrediction.caPercentage,
-                                    "Ca (grams)" to nutritionPrediction.caGrams,
-                                    "P (% DM)" to nutritionPrediction.pPercentage,
-                                    "P (grams)" to nutritionPrediction.pGrams
-                                )
-                                
-                                // Use LoRa AI enhancement with nutrition predictions
-                                // Clean workflow: Nutrition Model → Prompt → LoRa Model → Enhanced Result
-                                enhanceWithLoRaLLM(
-                                    context = context,
-                                    baseRecommendation = analysisResult.formattedAnalysis,
-                                    nutritionPredictions = nutritionPredictions,
-                                    cattleType = cattleType,
-                                    targetWeight = targetWeight,
-                                    bodyWeight = bodyWeight,
-                                    averageDailyGain = averageDailyGain,
-                                    modelManagerViewModel = modelManagerViewModel,
-                                    model = model
-                                )
-                            } else {
-                                // Fallback to base recommendation if predictions fail
-                                updateAnalysisResult(
-                                    cattleType = cattleType,
-                                    targetWeight = targetWeight,
-                                    bodyWeight = bodyWeight,
-                                    averageDailyGain = averageDailyGain,
-                                    recommendation = analysisResult.formattedAnalysis + "\n\n*Note: Unable to generate feed recommendations*",
-                                    isLoading = false
-                                )
-                                isAnalyzing = false
-                            }
                         } else {
+                            // Fallback if nutrition predictions fail
                             updateAnalysisResult(
                                 cattleType = cattleType,
                                 targetWeight = targetWeight,
                                 bodyWeight = bodyWeight,
                                 averageDailyGain = averageDailyGain,
-                                recommendation = analysisResult.formattedAnalysis,
+                                recommendation = "## Nutrition Model Analysis\n\n${analysisResult.formattedAnalysis}\n\n---\n\n## LoRA Model Enhancement\n\n*Note: Unable to generate enhanced feed recommendations - nutrition predictions unavailable*",
                                 isLoading = false
                             )
                             isAnalyzing = false
@@ -215,8 +213,7 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
         targetWeight: Double,
         bodyWeight: Double,
         averageDailyGain: Double,
-        modelManagerViewModel: ModelManagerViewModel,
-        model: Model
+        modelManagerViewModel: ModelManagerViewModel
     ) {
         try {
             // Clean workflow: Always use LoRa model for cattle advisor
@@ -281,11 +278,11 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
                 model = loraModel,
                 input = feedRecommendationPrompt,
                 resultListener = { partialResult, done ->
-                    // Update the loading result with LoRa enhanced response
+                    // Update with sequential results: Nutrition Model → LoRA Model
                     val combinedRecommendation = if (done) {
-                        baseRecommendation + "\n\n## LoRa AI-Enhanced Feed Recommendations\n\n" + partialResult
+                        "## Nutrition Model Analysis\n\n$baseRecommendation\n\n---\n\n## LoRA Model Enhancement\n\n$partialResult"
                     } else {
-                        baseRecommendation + "\n\n## LoRa AI-Enhanced Feed Recommendations\n\n" + partialResult
+                        "## Nutrition Model Analysis\n\n$baseRecommendation\n\n---\n\n## LoRA Model Enhancement\n\n$partialResult"
                     }
                     
                     updateAnalysisResult(
@@ -313,7 +310,7 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
                 targetWeight = targetWeight,
                 bodyWeight = bodyWeight,
                 averageDailyGain = averageDailyGain,
-                recommendation = baseRecommendation + "\n\n*Note: LoRa AI-enhanced feed recommendations unavailable. Showing scientific nutrition analysis only.*",
+                recommendation = "## Nutrition Model Analysis\n\n$baseRecommendation\n\n---\n\n## LoRA Model Enhancement\n\n*Note: LoRA AI-enhanced feed recommendations unavailable. Showing scientific nutrition analysis only.*",
                 isLoading = false
             )
             isAnalyzing = false
@@ -593,10 +590,6 @@ Please format your response clearly with sections and bullet points for easy rea
 
 **Important:** Base your calculations on standard cattle nutrition requirements and ensure the feed meets the energy and protein needs for the specified growth rate.
         """.trimIndent()
-    }
-    
-    fun clearError() {
-        errorMessage = null
     }
     
     fun clearResults() {
