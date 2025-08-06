@@ -18,6 +18,8 @@ package com.google.ai.edge.gallery.nutrition
 
 import android.content.Context
 import android.util.Log
+import com.google.ai.edge.gallery.api.NutritionQueryParams
+import com.google.ai.edge.gallery.api.predictNutrition
 import java.io.IOException
 
 class CattleNutritionService private constructor() {
@@ -120,7 +122,7 @@ class CattleNutritionService private constructor() {
     /**
      * Get comprehensive nutrition analysis including predictions and feed recommendations
      */
-    fun getNutritionAnalysis(
+    suspend fun getNutritionAnalysis(
         cattleType: String,
         targetWeight: Double,
         bodyWeight: Double,
@@ -214,7 +216,7 @@ class CattleNutritionService private constructor() {
         }
     }
     
-    private fun formatNutritionAnalysis(
+    private suspend fun formatNutritionAnalysis(
         cattleType: String,
         targetWeight: Double,
         bodyWeight: Double,
@@ -222,47 +224,22 @@ class CattleNutritionService private constructor() {
         prediction: NutritionPrediction,
         feedMenu: FeedMenu
     ): String {
-        val sb = StringBuilder()
+        // Map cattle type string to integer value for API
+        val typeValue = when (cattleType) {
+            "Growing Steer/Heifer" -> 0
+            "Growing Yearlings" -> 1
+            "Growing Mature Bulls" -> 2
+            else -> 1 // default to Growing Yearlings
+        }
         
-        sb.append("# Cattle Nutrition Analysis Report\n\n")
+        val params = NutritionQueryParams(
+            type_val = typeValue,
+            target_weight = targetWeight.toInt(),
+            body_weight = bodyWeight.toInt(),
+            adg = averageDailyGain
+        )
         
-        // Cattle information
-        sb.append("## Cattle Information\n")
-        sb.append("- **Type:** $cattleType\n")
-        sb.append("- **Current Body Weight:** ${String.format("%.1f", bodyWeight)} lbs\n")
-        sb.append("- **Target Weight:** ${String.format("%.1f", targetWeight)} lbs\n")
-        sb.append("- **Average Daily Gain (ADG):** ${String.format("%.2f", averageDailyGain)} lbs/day\n")
-        sb.append("- **Weight Gain Needed:** ${String.format("%.1f", targetWeight - bodyWeight)} lbs\n")
-        sb.append("- **Estimated Days to Target:** ${String.format("%.0f", (targetWeight - bodyWeight) / averageDailyGain)} days\n\n")
-        
-        // Daily nutrient requirements
-        sb.append("## Daily Nutrient Requirements\n")
-        sb.append("- **Dry Matter Intake (DMI):** ${String.format("%.1f", prediction.dryMatterIntake)} lbs/day\n")
-        sb.append("- **Total Digestible Nutrients (TDN):** ${String.format("%.1f", prediction.tdnPercentage)}% of DM (${String.format("%.1f", prediction.tdnLbs)} lbs)\n")
-        sb.append("- **Net Energy for Maintenance (NEm):** ${String.format("%.2f", prediction.nemPerLb)} Mcal/lb (${String.format("%.1f", prediction.nemMcal)} Mcal)\n")
-        sb.append("- **Net Energy for Gain (NEg):** ${String.format("%.2f", prediction.negPerLb)} Mcal/lb (${String.format("%.1f", prediction.negMcal)} Mcal)\n")
-        sb.append("- **Crude Protein (CP):** ${String.format("%.1f", prediction.cpPercentage)}% of DM (${String.format("%.2f", prediction.cpLbs)} lbs)\n")
-        sb.append("- **Calcium (Ca):** ${String.format("%.2f", prediction.caPercentage)}% of DM (${String.format("%.0f", prediction.caGrams)} g)\n")
-        sb.append("- **Phosphorus (P):** ${String.format("%.2f", prediction.pPercentage)}% of DM (${String.format("%.0f", prediction.pGrams)} g)\n\n")
-        
-        // Feed recommendations
-        sb.append(feedRecommendationEngine.formatFeedMenu(feedMenu))
-        
-        // Additional recommendations
-        sb.append("\n## Additional Recommendations\n")
-        sb.append("- **Pasture Management:** Ensure good quality pasture if available\n")
-        sb.append("- **Body Condition Monitoring:** Check body condition score regularly\n")
-        sb.append("- **Health Check:** Monitor for signs of illness or nutritional deficiencies\n")
-        sb.append("- **Cost Optimization:** Consider seasonal availability of feeds for cost savings\n")
-        sb.append("- **Professional Consultation:** Consult with a veterinarian or animal nutritionist for specific health concerns\n\n")
-        
-        // Disclaimer
-        sb.append("## Important Note\n")
-        sb.append("This analysis is based on nutritional models and should be used as a guide. ")
-        sb.append("Individual cattle may have varying requirements based on genetics, health status, environmental conditions, and management practices. ")
-        sb.append("Always consult with a qualified veterinarian or animal nutritionist for specific situations.\n")
-        
-        return sb.toString()
+        return predictNutrition(params)
     }
     
     data class ValidationResult(

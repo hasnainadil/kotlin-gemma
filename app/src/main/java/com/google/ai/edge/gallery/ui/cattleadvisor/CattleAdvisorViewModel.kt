@@ -130,65 +130,16 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
                 
                 when (analysisResult) {
                     is CattleNutritionService.NutritionAnalysisResult.Success -> {
-                        // Update with nutrition model results first
+                        // Display the nutrition analysis result directly without LLM enhancement
                         updateAnalysisResult(
                             cattleType = cattleType,
                             targetWeight = targetWeight,
                             bodyWeight = bodyWeight,
                             averageDailyGain = averageDailyGain,
-                            recommendation = "## Nutrition Model Analysis\n\n${analysisResult.formattedAnalysis}\n\n---\n\n## LoRA Model Enhancement\n\nGenerating enhanced recommendations...",
-                            isLoading = true
+                            recommendation = analysisResult.formattedAnalysis,
+                            isLoading = false
                         )
-                        
-                        // Step 2: Get raw nutrition predictions for LoRA prompt
-                        val nutritionPrediction = nutritionService.getNutritionPrediction(
-                            cattleType = cattleType,
-                            targetWeight = targetWeight,
-                            bodyWeight = bodyWeight,
-                            averageDailyGain = averageDailyGain
-                        )
-                        
-                        if (nutritionPrediction != null) {
-                            // Convert NutritionPrediction to Map format for prompt
-                            val nutritionPredictions = mapOf(
-                                "DM Intake (lbs/day)" to nutritionPrediction.dryMatterIntake,
-                                "TDN (% DM)" to nutritionPrediction.tdnPercentage,
-                                "TDN (lbs)" to nutritionPrediction.tdnLbs,
-                                "NEm (Mcal/lb)" to nutritionPrediction.nemPerLb,
-                                "NEm (Mcal)" to nutritionPrediction.nemMcal,
-                                "NEg (Mcal/lb)" to nutritionPrediction.negPerLb,
-                                "NEg (Mcal)" to nutritionPrediction.negMcal,
-                                "CP (% DM)" to nutritionPrediction.cpPercentage,
-                                "CP (lbs)" to nutritionPrediction.cpLbs,
-                                "Ca (%DM)" to nutritionPrediction.caPercentage,
-                                "Ca (grams)" to nutritionPrediction.caGrams,
-                                "P (% DM)" to nutritionPrediction.pPercentage,
-                                "P (grams)" to nutritionPrediction.pGrams
-                            )
-                            
-                            // Step 3: Enhance with LoRa LLM using nutrition predictions as prompt
-                            enhanceWithLoRaLLM(
-                                context = context,
-                                baseRecommendation = analysisResult.formattedAnalysis,
-                                nutritionPredictions = nutritionPredictions,
-                                cattleType = cattleType,
-                                targetWeight = targetWeight,
-                                bodyWeight = bodyWeight,
-                                averageDailyGain = averageDailyGain,
-                                modelManagerViewModel = modelManagerViewModel
-                            )
-                        } else {
-                            // Fallback if nutrition predictions fail
-                            updateAnalysisResult(
-                                cattleType = cattleType,
-                                targetWeight = targetWeight,
-                                bodyWeight = bodyWeight,
-                                averageDailyGain = averageDailyGain,
-                                recommendation = "## Nutrition Model Analysis\n\n${analysisResult.formattedAnalysis}\n\n---\n\n## LoRA Model Enhancement\n\n*Note: Unable to generate enhanced feed recommendations - nutrition predictions unavailable*",
-                                isLoading = false
-                            )
-                            isAnalyzing = false
-                        }
+                        isAnalyzing = false
                     }
                     is CattleNutritionService.NutritionAnalysisResult.Error -> {
                         removeLoadingResult(cattleType, targetWeight, bodyWeight, averageDailyGain)
