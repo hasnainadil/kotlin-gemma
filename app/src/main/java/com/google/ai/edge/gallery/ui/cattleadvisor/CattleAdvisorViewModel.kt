@@ -233,6 +233,7 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
             
             // Check if the LoRa model is actually downloaded first
             val downloadStatus = modelManagerViewModel.uiState.value.modelDownloadStatus[loraModel.name]
+            Log.d(TAG, "LoRa model download status: ${downloadStatus?.status}")
             if (downloadStatus?.status != com.google.ai.edge.gallery.data.ModelDownloadStatusType.SUCCEEDED) {
                 Log.w(TAG, "LoRa model '${loraModel.name}' is not downloaded yet. Download status: ${downloadStatus?.status}")
                 throw IllegalStateException("LoRa model not downloaded - please download the model first from the model management screen")
@@ -241,6 +242,9 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
             // Initialize the LoRa model if it's not already initialized
             if (loraModel.instance == null || loraModel.instance !is LlmModelInstance) {
                 Log.d(TAG, "Initializing LoRa model '${loraModel.name}' for cattle advisor...")
+                Log.d(TAG, "Model path: ${loraModel.getPath(context)}")
+                Log.d(TAG, "Model type: ${loraModel::class.simpleName}")
+                
                 modelManagerViewModel.initializeModel(
                     context = context,
                     task = TASK_LLM_CATTLE_ADVISOR,
@@ -253,11 +257,16 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
                 while ((loraModel.instance == null || loraModel.instance !is LlmModelInstance) && attempts < maxAttempts) {
                     kotlinx.coroutines.delay(100)
                     attempts++
+                    if (attempts % 10 == 0) {
+                        Log.d(TAG, "Still waiting for LoRa model initialization... attempt $attempts/$maxAttempts")
+                    }
                 }
                 
                 // Check if initialization was successful
                 if (loraModel.instance == null || loraModel.instance !is LlmModelInstance) {
                     Log.w(TAG, "LoRa model '${loraModel.name}' initialization failed or timed out")
+                    Log.w(TAG, "Model instance: ${loraModel.instance}")
+                    Log.w(TAG, "Instance type: ${loraModel.instance?.javaClass?.simpleName}")
                     throw IllegalStateException("LoRa model initialization failed")
                 }
             }
@@ -305,12 +314,19 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
             )
         } catch (e: Exception) {
             // Fallback to base recommendation if LoRa enhancement fails
+            val errorMessage = when {
+                e.message?.contains("initialization failed") == true -> "LoRa model initialization failed. The model may need to be re-downloaded or there may be a compatibility issue."
+                e.message?.contains("not downloaded") == true -> "LoRa model is not downloaded. Please download from model management screen."
+                e.message?.contains("timed out") == true -> "LoRa model initialization timed out. Please try again or restart the app."
+                else -> "LoRa model unavailable due to: ${e.message}"
+            }
+            
             updateAnalysisResult(
                 cattleType = cattleType,
                 targetWeight = targetWeight,
                 bodyWeight = bodyWeight,
                 averageDailyGain = averageDailyGain,
-                recommendation = "## Nutrition Model Analysis\n\n$baseRecommendation\n\n---\n\n## LoRA Model Enhancement\n\n*Note: LoRA AI-enhanced feed recommendations unavailable. Showing scientific nutrition analysis only.*",
+                recommendation = "## Nutrition Model Analysis\n\n$baseRecommendation\n\n---\n\n## LoRA Model Enhancement\n\n*$errorMessage*\n\n**Note**: The nutrition analysis above provides scientific feeding recommendations based on cattle type, weight, and growth targets. The LoRa model would have provided additional AI-enhanced suggestions but is currently unavailable.",
                 isLoading = false
             )
             isAnalyzing = false
