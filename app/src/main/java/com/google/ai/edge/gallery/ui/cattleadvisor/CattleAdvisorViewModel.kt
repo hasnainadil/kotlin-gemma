@@ -82,7 +82,7 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
         averageDailyGain: Double,
         modelManagerViewModel: ModelManagerViewModel,
         model: Model,
-        useAIEnhancement: Boolean = false // Disabled by default to use only nutrition model
+        useAIEnhancement: Boolean = true // Enable AI enhancement with LoRa LLM
     ) {
         Log.d(TAG, "Starting cattle nutrition analysis")
         
@@ -117,7 +117,7 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
         
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                // Always use pure nutrition analysis without AI enhancement
+                // Get nutrition analysis from the nutrition service
                 val analysisResult = nutritionService.getNutritionAnalysis(
                     cattleType = cattleType,
                     targetWeight = targetWeight,
@@ -127,15 +127,68 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
                 
                 when (analysisResult) {
                     is CattleNutritionService.NutritionAnalysisResult.Success -> {
-                        updateAnalysisResult(
-                            cattleType = cattleType,
-                            targetWeight = targetWeight,
-                            bodyWeight = bodyWeight,
-                            averageDailyGain = averageDailyGain,
-                            recommendation = analysisResult.formattedAnalysis,
-                            isLoading = false
-                        )
-                        isAnalyzing = false
+                        if (useAIEnhancement) {
+                            // Get the raw nutrition predictions for LLM prompt
+                            val nutritionPrediction = nutritionService.getNutritionPrediction(
+                                cattleType = cattleType,
+                                targetWeight = targetWeight,
+                                bodyWeight = bodyWeight,
+                                averageDailyGain = averageDailyGain
+                            )
+                            
+                            if (nutritionPrediction != null) {
+                                // Convert NutritionPrediction to Map format for prompt
+                                val nutritionPredictions = mapOf(
+                                    "DM Intake (lbs/day)" to nutritionPrediction.dryMatterIntake,
+                                    "TDN (% DM)" to nutritionPrediction.tdnPercentage,
+                                    "TDN (lbs)" to nutritionPrediction.tdnLbs,
+                                    "NEm (Mcal/lb)" to nutritionPrediction.nemPerLb,
+                                    "NEm (Mcal)" to nutritionPrediction.nemMcal,
+                                    "NEg (Mcal/lb)" to nutritionPrediction.negPerLb,
+                                    "NEg (Mcal)" to nutritionPrediction.negMcal,
+                                    "CP (% DM)" to nutritionPrediction.cpPercentage,
+                                    "CP (lbs)" to nutritionPrediction.cpLbs,
+                                    "Ca (%DM)" to nutritionPrediction.caPercentage,
+                                    "Ca (grams)" to nutritionPrediction.caGrams,
+                                    "P (% DM)" to nutritionPrediction.pPercentage,
+                                    "P (grams)" to nutritionPrediction.pGrams
+                                )
+                                
+                                // Use AI enhancement with LoRa LLM and nutrition predictions
+                                enhanceWithLoRaLLM(
+                                    context = context,
+                                    baseRecommendation = analysisResult.formattedAnalysis,
+                                    nutritionPredictions = nutritionPredictions,
+                                    cattleType = cattleType,
+                                    targetWeight = targetWeight,
+                                    bodyWeight = bodyWeight,
+                                    averageDailyGain = averageDailyGain,
+                                    modelManagerViewModel = modelManagerViewModel,
+                                    model = model
+                                )
+                            } else {
+                                // Fallback to base recommendation if predictions fail
+                                updateAnalysisResult(
+                                    cattleType = cattleType,
+                                    targetWeight = targetWeight,
+                                    bodyWeight = bodyWeight,
+                                    averageDailyGain = averageDailyGain,
+                                    recommendation = analysisResult.formattedAnalysis + "\n\n*Note: Unable to generate feed recommendations*",
+                                    isLoading = false
+                                )
+                                isAnalyzing = false
+                            }
+                        } else {
+                            updateAnalysisResult(
+                                cattleType = cattleType,
+                                targetWeight = targetWeight,
+                                bodyWeight = bodyWeight,
+                                averageDailyGain = averageDailyGain,
+                                recommendation = analysisResult.formattedAnalysis,
+                                isLoading = false
+                            )
+                            isAnalyzing = false
+                        }
                     }
                     is CattleNutritionService.NutritionAnalysisResult.Error -> {
                         removeLoadingResult(cattleType, targetWeight, bodyWeight, averageDailyGain)
@@ -152,9 +205,10 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
         }
     }
     
-    private suspend fun enhanceWithAI(
+    private suspend fun enhanceWithLoRaLLM(
         context: Context,
         baseRecommendation: String,
+        nutritionPredictions: Map<String, Double>,
         cattleType: String,
         targetWeight: Double,
         bodyWeight: Double,
@@ -177,26 +231,20 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
                 }
             }
             
-            // Create enhanced prompt that includes the nutrition analysis
-            val enhancedPrompt = createEnhancedPrompt(
-                baseRecommendation = baseRecommendation,
-                cattleType = cattleType,
-                targetWeight = targetWeight,
-                bodyWeight = bodyWeight,
-                averageDailyGain = averageDailyGain
-            )
+            // Create feed recommendation prompt based on Python implementation
+            val feedRecommendationPrompt = createFeedRecommendationPrompt(nutritionPredictions)
             
-            Log.d(TAG, "Sending enhanced prompt to AI model")
+            Log.d(TAG, "Sending feed recommendation prompt to LoRa LLM")
 
             LlmChatModelHelper.runInference(
                 model = model,
-                input = enhancedPrompt,
+                input = feedRecommendationPrompt,
                 resultListener = { partialResult, done ->
-                    // Update the loading result with AI-enhanced response
+                    // Update the loading result with LoRa LLM response
                     val combinedRecommendation = if (done) {
-                        baseRecommendation + "\n\n## AI-Enhanced Insights\n\n" + partialResult
+                        baseRecommendation + "\n\n## Feed Recommendation\n\n" + partialResult
                     } else {
-                        baseRecommendation + "\n\n## AI-Enhanced Insights\n\n" + partialResult
+                        baseRecommendation + "\n\n## Feed Recommendation\n\n" + partialResult
                     }
                     
                     updateAnalysisResult(
@@ -210,7 +258,7 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
                     
                     if (done) {
                         isAnalyzing = false
-                        Log.d(TAG, "AI-enhanced cattle nutrition analysis completed")
+                        Log.d(TAG, "LoRa LLM feed recommendation completed")
                     }
                 },
                 cleanUpListener = {
@@ -218,17 +266,17 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
                 }
             )
         } catch (e: Exception) {
-            // Fallback to base recommendation if AI enhancement fails
+            // Fallback to base recommendation if LLM enhancement fails
             updateAnalysisResult(
                 cattleType = cattleType,
                 targetWeight = targetWeight,
                 bodyWeight = bodyWeight,
                 averageDailyGain = averageDailyGain,
-                recommendation = baseRecommendation + "\n\n*Note: AI enhancement unavailable*",
+                recommendation = baseRecommendation + "\n\n*Note: Feed recommendation enhancement unavailable*",
                 isLoading = false
             )
             isAnalyzing = false
-            Log.w(TAG, "AI enhancement failed, using base recommendation", e)
+            Log.w(TAG, "LoRa LLM enhancement failed, using base recommendation", e)
         }
     }
     
@@ -268,6 +316,90 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
             it.isLoading
         }
     }
+    private fun createFeedRecommendationPrompt(nutritionPredictions: Map<String, Double>): String {
+        // Feed ingredients database from Python implementation
+        val feedIngredients = mapOf(
+            "Alfalfa Hay" to mapOf("TDN" to 58, "NEm" to 0.50, "NEg" to 0.30, "CP" to 17, "Ca" to 1.20, "P" to 0.22),
+            "Corn Silage" to mapOf("TDN" to 65, "NEm" to 0.60, "NEg" to 0.35, "CP" to 8, "Ca" to 0.30, "P" to 0.22),
+            "Soybean Meal (48%)" to mapOf("TDN" to 82, "NEm" to 0.70, "NEg" to 0.40, "CP" to 48, "Ca" to 0.30, "P" to 0.65),
+            "Ground Corn" to mapOf("TDN" to 88, "NEm" to 0.90, "NEg" to 0.65, "CP" to 9, "Ca" to 0.02, "P" to 0.28),
+            "Dicalcium Phosphate" to mapOf("TDN" to 0, "NEm" to 0.0, "NEg" to 0.0, "CP" to 0, "Ca" to 23.00, "P" to 18.00),
+            "Trace Mineral Mix" to mapOf("TDN" to 0, "NEm" to 0.0, "NEg" to 0.0, "CP" to 0, "Ca" to 12.00, "P" to 8.00),
+            "Salt" to mapOf("TDN" to 0, "NEm" to 0.0, "NEg" to 0.0, "CP" to 0, "Ca" to 0.00, "P" to 0.00)
+        )
+        
+        // Extract nutrition requirements from predictions
+        val dmIntake = nutritionPredictions["DM Intake (lbs/day)"] ?: 0.0
+        val tdnPercent = nutritionPredictions["TDN (% DM)"] ?: 0.0
+        val tdnLbs = nutritionPredictions["TDN (lbs)"] ?: 0.0
+        val nemMcalLb = nutritionPredictions["NEm (Mcal/lb)"] ?: 0.0
+        val nemMcal = nutritionPredictions["NEm (Mcal)"] ?: 0.0
+        val negMcalLb = nutritionPredictions["NEg (Mcal/lb)"] ?: 0.0
+        val negMcal = nutritionPredictions["NEg (Mcal)"] ?: 0.0
+        val cpPercent = nutritionPredictions["CP (% DM)"] ?: 0.0
+        val cpLbs = nutritionPredictions["CP (lbs)"] ?: 0.0
+        val caPercent = nutritionPredictions["Ca (%DM)"] ?: 0.0
+        val caGrams = nutritionPredictions["Ca (grams)"] ?: 0.0
+        val pPercent = nutritionPredictions["P (% DM)"] ?: 0.0
+        val pGrams = nutritionPredictions["P (grams)"] ?: 0.0
+        
+        // Create the prompt following Python implementation
+        var prompt = """You are an expert cattle nutritionist.
+
+A cow needs the following nutrients per day:
+- Dry Matter Intake (DMI): ${String.format("%.1f", dmIntake)} lbs
+- Total Digestible Nutrients (TDN): ${String.format("%.1f", tdnPercent)}% of DM (${String.format("%.1f", tdnLbs)} lbs)
+- Net Energy for Maintenance (NEm): ${String.format("%.2f", nemMcalLb)} Mcal/lb (${String.format("%.1f", nemMcal)} Mcal)
+- Net Energy for Gain (NEg): ${String.format("%.2f", negMcalLb)} Mcal/lb (${String.format("%.1f", negMcal)} Mcal)
+- Crude Protein (CP): ${String.format("%.1f", cpPercent)}% of DM (${String.format("%.2f", cpLbs)} lbs)
+- Calcium (Ca): ${String.format("%.2f", caPercent)}% of DM (${String.format("%.0f", caGrams)} g)
+- Phosphorus (P): ${String.format("%.2f", pPercent)}% of DM (${String.format("%.0f", pGrams)} g)
+
+Here is a list of available feed ingredients and their nutrient values per pound of dry matter:
+
+| Feed Ingredient        | TDN (%) | NEm (Mcal/lb) | NEg (Mcal/lb) | CP (%) | Ca (%) | P (%) |
+|------------------------|---------|----------------|----------------|--------|--------|--------|"""
+        
+        // Add feed ingredients table
+        for ((name, values) in feedIngredients) {
+            val tdnVal = values["TDN"] ?: 0
+            val nemVal = values["NEm"] ?: 0.0
+            val negVal = values["NEg"] ?: 0.0
+            val cpVal = values["CP"] ?: 0
+            val caVal = values["Ca"] ?: 0.0
+            val pVal = values["P"] ?: 0.0
+            
+            prompt += String.format(
+                "\n| %-20s | %-7s | %-12s | %-12s | %-6s | %-6s | %-6s |",
+                name, tdnVal, nemVal, negVal, cpVal, caVal, pVal
+            )
+        }
+        
+        prompt += """
+
+**Your Task:**
+- Design a realistic daily feed menu of 5 to 7 ingredients from the available ingredients.
+- Show quantity of each ingredient in pounds of dry matter.
+- Calculate and show the contribution of each to total TDN, NEm, NEg, CP, Ca, and P.
+- Ensure the totals are as close as possible to the cow's requirements above.
+- Keep the ingredients reasonable and commonly used.
+
+Return a table like this:
+
+| Ingredient            | Amount (lbs DM) | TDN (lbs) | NEm (Mcal) | NEg (Mcal) | CP (lbs) | Ca (g) | P (g) |
+|-----------------------|------------------|------------|-------------|-------------|----------|--------|--------|
+| Feed 1                |                  |            |             |             |          |        |        |
+| ...                   |                  |            |             |             |          |        |        |
+| **Total**             | ${String.format("%.1f", dmIntake)} | ${String.format("%.1f", tdnLbs)} | ${String.format("%.1f", nemMcal)} | ${String.format("%.1f", negMcal)} | ${String.format("%.2f", cpLbs)} | ${String.format("%.0f", caGrams)} | ${String.format("%.0f", pGrams)} |
+
+After your table, list any assumptions or notes you made.
+
+Start your response with: "Here is the feed menu that meets the cow's nutrient needs."
+"""
+        
+        return prompt
+    }
+
     private fun createEnhancedPrompt(
         baseRecommendation: String,
         cattleType: String,
