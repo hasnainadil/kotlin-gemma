@@ -42,7 +42,6 @@ import com.google.ai.edge.gallery.GalleryTopAppBar
 import com.google.ai.edge.gallery.data.AppBarAction
 import com.google.ai.edge.gallery.data.AppBarActionType
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
-import com.google.ai.edge.gallery.ui.common.chat.ModelSelector
 import com.google.ai.edge.gallery.ui.common.ConfigDialog
 import kotlinx.coroutines.launch
 
@@ -387,7 +386,6 @@ private fun CattleAdvisorResultCard(
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .verticalScroll(rememberScrollState())
                             .heightIn(max = 400.dp)
                     )
                 }
@@ -397,7 +395,6 @@ private fun CattleAdvisorResultCard(
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
                         .heightIn(max = 400.dp)
                 )
             }

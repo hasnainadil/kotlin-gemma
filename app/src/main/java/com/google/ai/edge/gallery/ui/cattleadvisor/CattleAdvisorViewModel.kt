@@ -82,7 +82,7 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
         averageDailyGain: Double,
         modelManagerViewModel: ModelManagerViewModel,
         model: Model,
-        useAIEnhancement: Boolean = true
+        useAIEnhancement: Boolean = false // Disabled by default to use only nutrition model
     ) {
         Log.d(TAG, "Starting cattle nutrition analysis")
         
@@ -115,91 +115,30 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
         
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                // Check if this is the nutrition model
-                if (NutritionModelFactory.isNutritionModel(model)) {
-                    // Use pure nutrition analysis without AI enhancement
-                    val analysisResult = nutritionService.getNutritionAnalysis(
-                        cattleType = cattleType,
-                        targetWeight = targetWeight,
-                        bodyWeight = bodyWeight,
-                        averageDailyGain = averageDailyGain
-                    )
-                    
-                    when (analysisResult) {
-                        is CattleNutritionService.NutritionAnalysisResult.Success -> {
-                            updateAnalysisResult(
-                                cattleType = cattleType,
-                                targetWeight = targetWeight,
-                                bodyWeight = bodyWeight,
-                                averageDailyGain = averageDailyGain,
-                                recommendation = analysisResult.formattedAnalysis,
-                                isLoading = false
-                            )
-                            isAnalyzing = false
-                        }
-                        is CattleNutritionService.NutritionAnalysisResult.Error -> {
-                            removeLoadingResult(cattleType, targetWeight, bodyWeight, averageDailyGain)
-                            errorMessage = analysisResult.message
-                            isAnalyzing = false
-                        }
+                // Always use pure nutrition analysis without AI enhancement
+                val analysisResult = nutritionService.getNutritionAnalysis(
+                    cattleType = cattleType,
+                    targetWeight = targetWeight,
+                    bodyWeight = bodyWeight,
+                    averageDailyGain = averageDailyGain
+                )
+                
+                when (analysisResult) {
+                    is CattleNutritionService.NutritionAnalysisResult.Success -> {
+                        updateAnalysisResult(
+                            cattleType = cattleType,
+                            targetWeight = targetWeight,
+                            bodyWeight = bodyWeight,
+                            averageDailyGain = averageDailyGain,
+                            recommendation = analysisResult.formattedAnalysis,
+                            isLoading = false
+                        )
+                        isAnalyzing = false
                     }
-                } else {
-                    // Use AI model with optional nutrition enhancement
-                    val analysisResult = nutritionService.getNutritionAnalysis(
-                        cattleType = cattleType,
-                        targetWeight = targetWeight,
-                        bodyWeight = bodyWeight,
-                        averageDailyGain = averageDailyGain
-                    )
-                    
-                    when (analysisResult) {
-                        is CattleNutritionService.NutritionAnalysisResult.Success -> {
-                            val baseRecommendation = analysisResult.formattedAnalysis
-                            
-                            if (useAIEnhancement && model.instance != null) {
-                                // Enhance with AI model for additional insights
-                                enhanceWithAI(
-                                    context = context,
-                                    baseRecommendation = baseRecommendation,
-                                    cattleType = cattleType,
-                                    targetWeight = targetWeight,
-                                    bodyWeight = bodyWeight,
-                                    averageDailyGain = averageDailyGain,
-                                    modelManagerViewModel = modelManagerViewModel,
-                                    model = model
-                                )
-                            } else {
-                                // Use only the nutrition model results
-                                updateAnalysisResult(
-                                    cattleType = cattleType,
-                                    targetWeight = targetWeight,
-                                    bodyWeight = bodyWeight,
-                                    averageDailyGain = averageDailyGain,
-                                    recommendation = baseRecommendation,
-                                    isLoading = false
-                                )
-                                isAnalyzing = false
-                            }
-                        }
-                        is CattleNutritionService.NutritionAnalysisResult.Error -> {
-                            // Fallback to AI-only analysis if nutrition service fails
-                            if (useAIEnhancement && model.instance != null) {
-                                enhanceWithAI(
-                                    context = context,
-                                    baseRecommendation = "",
-                                    cattleType = cattleType,
-                                    targetWeight = targetWeight,
-                                    bodyWeight = bodyWeight,
-                                    averageDailyGain = averageDailyGain,
-                                    modelManagerViewModel = modelManagerViewModel,
-                                    model = model
-                                )
-                            } else {
-                                removeLoadingResult(cattleType, targetWeight, bodyWeight, averageDailyGain)
-                                errorMessage = analysisResult.message
-                                isAnalyzing = false
-                            }
-                        }
+                    is CattleNutritionService.NutritionAnalysisResult.Error -> {
+                        removeLoadingResult(cattleType, targetWeight, bodyWeight, averageDailyGain)
+                        errorMessage = analysisResult.message
+                        isAnalyzing = false
                     }
                 }
             } catch (e: Exception) {
