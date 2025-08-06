@@ -20,6 +20,7 @@ import android.content.Context
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -44,13 +45,15 @@ data class CattleAdvisorResult(
     val targetWeight: Double,
     val bodyWeight: Double,
     val averageDailyGain: Double,
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    val showUnavailableIngredientsInput: Boolean = false,
+    val unavailableIngredients: List<String> = emptyList()
 )
 
 @HiltViewModel
 class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
     
-    private val _analysisResults = mutableListOf<CattleAdvisorResult>()
+    private val _analysisResults = mutableStateListOf<CattleAdvisorResult>()
     val analysisResults: List<CattleAdvisorResult> get() = _analysisResults.toList()
     
     private val nutritionService = CattleNutritionService.getInstance()
@@ -64,8 +67,85 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
     var isNutritionServiceInitialized by mutableStateOf(false)
         private set
 
+    var isRetryingWithUnavailableIngredients by mutableStateOf(false)
+        private set
+
     fun clearError() {
         errorMessage = null
+    }
+
+    fun showUnavailableIngredientsInput() {
+        val latestResult = _analysisResults.lastOrNull()
+        if (latestResult != null && !latestResult.isLoading) {
+            val updatedResult = latestResult.copy(showUnavailableIngredientsInput = true)
+            _analysisResults[_analysisResults.size - 1] = updatedResult
+        }
+    }
+
+    fun retryWithUnavailableIngredients(unavailableIngredientsText: String) {
+        val unavailableIngredients = unavailableIngredientsText
+            .split(",")
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+
+        Log.d("API Call", "Processing unavailable ingredients: $unavailableIngredients")
+
+        val latestResult = _analysisResults.lastOrNull()
+        if (latestResult != null) {
+            // Update the current result to show loading state for retry
+            val updatedResult = latestResult.copy(
+                isLoading = true,
+                showUnavailableIngredientsInput = false,
+                unavailableIngredients = unavailableIngredients
+            )
+            _analysisResults[_analysisResults.size - 1] = updatedResult
+            Log.d("API Call", "Updated result to loading state")
+
+            isRetryingWithUnavailableIngredients = true
+            
+            viewModelScope.launch(Dispatchers.IO) {
+                try {
+                    // Call the retry API with unavailable ingredients
+                    Log.d("API Call", "Calling retryWithUnavailableIngredients with: $unavailableIngredients")
+                    val newRecommendation = com.google.ai.edge.gallery.api.retryWithUnavailableIngredients(unavailableIngredients)
+                    Log.d("API Call", "Received alternative recommendation length: ${newRecommendation.length}")
+                    Log.d("API Call", "Alternative recommendation content: $newRecommendation")
+                    
+                    // Update the result with new recommendation on main thread
+                    viewModelScope.launch(Dispatchers.Main) {
+                        val finalResult = updatedResult.copy(
+                            recommendation = newRecommendation,
+                            isLoading = false,
+                            showUnavailableIngredientsInput = true // Keep showing the input for further modifications
+                        )
+                        _analysisResults[_analysisResults.size - 1] = finalResult
+                        Log.d("API Call", "Updated analysis result with alternative recommendation on main thread")
+                        Log.d("API Call", "Final result recommendation length: ${finalResult.recommendation.length}")
+                        Log.d("API Call", "Final result loading state: ${finalResult.isLoading}")
+                    }
+                    
+                } catch (e: Exception) {
+                    Log.e("API Call", "Error retrying with unavailable ingredients", e)
+                    viewModelScope.launch(Dispatchers.Main) {
+                        errorMessage = "Failed to regenerate recommendation: ${e.message}"
+                        
+                        // Revert to previous state
+                        val revertedResult = updatedResult.copy(
+                            isLoading = false,
+                            showUnavailableIngredientsInput = true
+                        )
+                        _analysisResults[_analysisResults.size - 1] = revertedResult
+                    }
+                } finally {
+                    viewModelScope.launch(Dispatchers.Main) {
+                        isRetryingWithUnavailableIngredients = false
+                        Log.d("API Call", "Retry operation completed")
+                    }
+                }
+            }
+        } else {
+            Log.w("API Call", "No latest result found to retry with unavailable ingredients")
+        }
     }
 
     fun initializeNutritionService(context: Context) {
@@ -137,7 +217,8 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
                             bodyWeight = bodyWeight,
                             averageDailyGain = averageDailyGain,
                             recommendation = analysisResult.formattedAnalysis,
-                            isLoading = false
+                            isLoading = false,
+                            showUnavailableIngredientsInput = true // Show input after initial analysis
                         )
                         isAnalyzing = false
                     }
@@ -291,7 +372,8 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
         bodyWeight: Double,
         averageDailyGain: Double,
         recommendation: String,
-        isLoading: Boolean
+        isLoading: Boolean,
+        showUnavailableIngredientsInput: Boolean = false
     ) {
         val index = _analysisResults.indexOfLast { 
             it.cattleType == cattleType && 
@@ -302,7 +384,8 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
         if (index >= 0) {
             _analysisResults[index] = _analysisResults[index].copy(
                 recommendation = recommendation,
-                isLoading = isLoading
+                isLoading = isLoading,
+                showUnavailableIngredientsInput = showUnavailableIngredientsInput
             )
         }
     }

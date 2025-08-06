@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
@@ -37,8 +38,13 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -96,7 +102,8 @@ fun CattleAdvisorScreen(
                     actionFn = navigateUp
                 )
             )
-        }
+        },
+        modifier = Modifier.fillMaxSize()
     ) { paddingValues ->
         Column(
             modifier = modifier
@@ -275,7 +282,12 @@ fun CattleAdvisorScreen(
                 
                 // Show latest result in full screen mode
                 analysisResults.lastOrNull()?.let { latestResult ->
-                    FullScreenAnalysisCard(result = latestResult)
+                    // Debug log to check if UI is getting updated results
+                    LaunchedEffect(latestResult.recommendation) {
+                        android.util.Log.d("UI Update", "FullScreenAnalysisCard received recommendation length: ${latestResult.recommendation.length}")
+                        android.util.Log.d("UI Update", "FullScreenAnalysisCard loading state: ${latestResult.isLoading}")
+                    }
+                    FullScreenAnalysisCard(result = latestResult, viewModel = viewModel)
                 }
             }
         }
@@ -437,6 +449,7 @@ private fun CattleAdvisorResultCard(
 @Composable
 private fun FullScreenAnalysisCard(
     result: CattleAdvisorResult,
+    viewModel: CattleAdvisorViewModel,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -523,7 +536,10 @@ private fun FullScreenAnalysisCard(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "Analyzing nutrition requirements...",
+                            text = if (viewModel.isRetryingWithUnavailableIngredients) 
+                                "Regenerating recommendations with your constraints..."
+                            else
+                                "Analyzing nutrition requirements...",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -536,13 +552,16 @@ private fun FullScreenAnalysisCard(
                                     .fillMaxWidth()
                                     .horizontalScroll(rememberScrollState())
                             ) {
-                                MarkdownText(
-                                    text = result.recommendation,
-                                    modifier = Modifier
-                                        .widthIn(min = 300.dp, max = 1000.dp)
-                                        .wrapContentWidth(),
-                                    smallFontSize = false
-                                )
+                                // Add key to force recomposition when recommendation changes
+                                key(result.recommendation.hashCode()) {
+                                    MarkdownText(
+                                        text = result.recommendation,
+                                        modifier = Modifier
+                                            .widthIn(min = 300.dp, max = 1000.dp)
+                                            .wrapContentWidth(),
+                                        smallFontSize = false
+                                    )
+                                }
                             }
                         }
                     }
@@ -586,16 +605,26 @@ private fun FullScreenAnalysisCard(
                                 .fillMaxWidth()
                                 .horizontalScroll(rememberScrollState())
                         ) {
-                            MarkdownText(
-                                text = result.recommendation,
-                                modifier = Modifier
-                                    .widthIn(min = 300.dp, max = 1000.dp) // Increased max width for better table display
-                                    .wrapContentWidth(),
-                                smallFontSize = false
-                            )
+                            // Add key to force recomposition when recommendation changes
+                            key(result.recommendation.hashCode()) {
+                                MarkdownText(
+                                    text = result.recommendation,
+                                    modifier = Modifier
+                                        .widthIn(min = 300.dp, max = 1000.dp) // Increased max width for better table display
+                                        .wrapContentWidth(),
+                                    smallFontSize = false
+                                )
+                            }
                         }
                     }
                 }
+            }
+        }
+
+        // Unavailable Ingredients Input Section
+        if (result.showUnavailableIngredientsInput && !result.isLoading) {
+            item {
+                UnavailableIngredientsCard(result = result, viewModel = viewModel)
             }
         }
     }
@@ -836,6 +865,119 @@ private fun CattleStatCard(
                 color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center
             )
+        }
+    }
+}
+
+@Composable
+private fun UnavailableIngredientsCard(
+    result: CattleAdvisorResult,
+    viewModel: CattleAdvisorViewModel,
+    modifier: Modifier = Modifier
+) {
+    var unavailableIngredientsInput by remember { mutableStateOf("") }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusRequester = remember { FocusRequester() }
+    var isFocused by remember { mutableStateOf(false) }
+    
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(24.dp)
+        ) {
+            // Title with icon
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "🚫",
+                    style = MaterialTheme.typography.headlineMedium
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "Customize Feed Recommendations",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = "If some ingredients are not available in your area, list them below (comma-separated) and we'll generate alternative recommendations:",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            OutlinedTextField(
+                value = unavailableIngredientsInput,
+                onValueChange = { unavailableIngredientsInput = it },
+                label = { Text("Unavailable ingredients (comma-separated)") },
+                placeholder = { Text("e.g., Alfalfa Hay, Soybean Meal, Ground Corn") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusRequester)
+                    .onFocusChanged { focusState ->
+                        isFocused = focusState.isFocused
+                    },
+                minLines = 2,
+                maxLines = 4,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Text,
+                    imeAction = ImeAction.Done
+                ),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        keyboardController?.hide()
+                        if (unavailableIngredientsInput.isNotBlank()) {
+                            viewModel.retryWithUnavailableIngredients(unavailableIngredientsInput)
+                        }
+                    }
+                )
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Button(
+                onClick = {
+                    keyboardController?.hide()
+                    if (unavailableIngredientsInput.isNotBlank()) {
+                        viewModel.retryWithUnavailableIngredients(unavailableIngredientsInput)
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = unavailableIngredientsInput.isNotBlank() && !viewModel.isRetryingWithUnavailableIngredients,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.tertiary
+                )
+            ) {
+                if (viewModel.isRetryingWithUnavailableIngredients) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onTertiary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Generating Alternatives...")
+                } else {
+                    Icon(
+                        Icons.Default.Analytics,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Generate Alternative Recommendations")
+                }
+            }
         }
     }
 }
