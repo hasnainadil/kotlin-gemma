@@ -33,7 +33,7 @@ import com.google.ai.edge.gallery.R
 enum class TaskType(val label: String, val id: String) {
   LLM_CHAT(label = "AI Chat", id = "llm_chat"),
   LLM_PROMPT_LAB(label = "Prompt Lab", id = "llm_prompt_lab"),
-  LLM_ASK_IMAGE(label = "Ask Image", id = "llm_ask_image"),
+  LLM_ASK_IMAGE(label = "Ask Disease", id = "llm_ask_image"),
   LLM_ASK_AUDIO(label = "Audio Scribe", id = "llm_ask_audio"),
   LLM_FUNCTION_CALLING(label = "Function Calling", id = "llm_function_calling"),
   LLM_DISEASE_SCANNING(label = "Disease Scanning", id = "llm_disease_scanning"),
@@ -105,7 +105,7 @@ val TASK_LLM_ASK_IMAGE =
     type = TaskType.LLM_ASK_IMAGE,
     icon = Icons.Outlined.Mms,
     models = mutableListOf(),
-    description = "Ask questions about images with on-device large language models",
+    description = "Ask questions about disease symptoms and medical images with AI-powered LoRa models",
     docUrl = "https://ai.google.dev/edge/mediapipe/solutions/genai/llm_inference/android",
     sourceCodeUrl =
       "https://github.com/google-ai-edge/gallery/blob/main/Android/src/app/src/main/java/com/google/ai/edge/gallery/ui/llmchat/LlmChatModelHelper.kt",

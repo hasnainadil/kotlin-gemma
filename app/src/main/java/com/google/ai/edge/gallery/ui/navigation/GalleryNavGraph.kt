@@ -163,6 +163,27 @@ fun GalleryNavHost(
           "capability_select",
           bundleOf("capability_name" to task.type.toString()),
         )
+      } else if (task.type == TaskType.LLM_ASK_IMAGE) {
+        // Special handling for Ask Disease - automatically select LoRa model and skip model selection
+        val loraModel = task.models.find { 
+          it.name.lowercase().contains("lora") && 
+          it.name.lowercase().contains("ddx")
+        }
+        if (loraModel != null) {
+          navController.navigate("${LlmAskImageDestination.route}/${loraModel.name}")
+          firebaseAnalytics?.logEvent(
+            "capability_select",
+            bundleOf("capability_name" to task.type.toString()),
+          )
+        } else {
+          // Fallback to model selection if LoRa model not found
+          pickedTask = task
+          showModelManager = true
+          firebaseAnalytics?.logEvent(
+            "capability_select",
+            bundleOf("capability_name" to task.type.toString()),
+          )
+        }
       } else {
         // For all other tasks, show model manager first
         pickedTask = task
