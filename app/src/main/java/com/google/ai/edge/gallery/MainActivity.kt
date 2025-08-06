@@ -53,6 +53,7 @@ class MainActivity : ComponentActivity() {
   override fun onResume() {
     super.onResume()
 
+    // Only log analytics if Firebase is properly initialized
     firebaseAnalytics?.logEvent(
       FirebaseAnalytics.Event.APP_OPEN,
       bundleOf(

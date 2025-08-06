@@ -30,6 +30,7 @@ import com.google.ai.edge.gallery.data.TASK_LLM_DISEASE_SCANNING
 import com.google.ai.edge.gallery.ui.llmchat.LlmChatModelHelper
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -59,7 +60,7 @@ class DiseaseScanningViewModel @Inject constructor() : ViewModel() {
         
         isScanning = true
 
-        viewModelScope.launch {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 // Initialize the model if it's not already initialized
                 if (model.instance == null) {

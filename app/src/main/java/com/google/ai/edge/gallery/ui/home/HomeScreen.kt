@@ -255,16 +255,6 @@ fun HomeScreen(
             )
           }
         },
-        floatingActionButton = {
-          // A floating action button to show "import model" bottom sheet.
-          SmallFloatingActionButton(
-            onClick = { showImportModelSheet = true },
-            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-            contentColor = MaterialTheme.colorScheme.secondary,
-          ) {
-            Icon(Icons.Filled.Add, "")
-          }
-        },
       ) { innerPadding ->
         // Outer box for coloring the background edge to edge.
         Box(
@@ -454,7 +444,7 @@ private fun AppTitle() {
       animationDurationMs = TITLE_FIRST_LINE_ANIMATION_DURATION,
     )
   }
-  // Second line text "Edge Gallery" and its animation.
+  // Second line text "Care" and its animation.
   //
   // The initial animation is the same as the first line text. Right before it is done, the final
   // text with a gradient is revealed.
@@ -679,8 +669,8 @@ private fun TaskCard(task: Task, index: Int, onClick: () -> Unit, modifier: Modi
   val modelCountLabel by remember {
     derivedStateOf {
       when (modelCount) {
-        1 -> "1 Model"
-        else -> "%d Models".format(modelCount)
+        1 -> ""
+         else -> ""
       }
     }
   }

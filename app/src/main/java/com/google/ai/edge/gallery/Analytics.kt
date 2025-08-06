@@ -22,15 +22,28 @@ import com.google.firebase.analytics.FirebaseAnalytics
 import com.google.firebase.analytics.analytics
 
 private var hasLoggedAnalyticsWarning = false
+private var cachedFirebaseAnalytics: FirebaseAnalytics? = null
+private var hasTriedInitialization = false
 
 val firebaseAnalytics: FirebaseAnalytics?
-  get() =
-    runCatching { Firebase.analytics }
+  get() {
+    // Return cached instance if we have one
+    if (cachedFirebaseAnalytics != null || hasTriedInitialization) {
+      return cachedFirebaseAnalytics
+    }
+    
+    // Try to initialize Firebase Analytics
+    cachedFirebaseAnalytics = runCatching { Firebase.analytics }
       .onFailure { exception ->
-        // Firebase.analytics can throw an exception if goolgle-services is not set up, e.g.,
+        // Firebase.analytics can throw an exception if google-services is not set up, e.g.,
         // missing google-services.json.
         if (!hasLoggedAnalyticsWarning) {
           Log.w("AGAnalyticsFirebase", "Firebase Analytics is not available", exception)
+          hasLoggedAnalyticsWarning = true
         }
       }
       .getOrNull()
+    
+    hasTriedInitialization = true
+    return cachedFirebaseAnalytics
+  }

@@ -50,10 +50,11 @@ import androidx.navigation.navArgument
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.TASK_LLM_ASK_AUDIO
 import com.google.ai.edge.gallery.data.TASK_LLM_ASK_IMAGE
+import com.google.ai.edge.gallery.data.TASK_LLM_CATTLE_ADVISOR
 import com.google.ai.edge.gallery.data.TASK_LLM_CHAT
+import com.google.ai.edge.gallery.data.TASK_LLM_DISEASE_SCANNING
 import com.google.ai.edge.gallery.data.TASK_LLM_FUNCTION_CALLING
 import com.google.ai.edge.gallery.data.TASK_LLM_PROMPT_LAB
-import com.google.ai.edge.gallery.data.TASK_LLM_DISEASE_SCANNING
 import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.data.TaskType
 import com.google.ai.edge.gallery.data.getModelByName
@@ -70,6 +71,9 @@ import com.google.ai.edge.gallery.ui.llmchat.LlmAskImageViewModel
 import com.google.ai.edge.gallery.ui.llmchat.LlmChatDestination
 import com.google.ai.edge.gallery.ui.llmchat.LlmChatScreen
 import com.google.ai.edge.gallery.ui.llmchat.LlmChatViewModel
+import com.google.ai.edge.gallery.ui.cattleadvisor.CattleAdvisorDestination
+import com.google.ai.edge.gallery.ui.cattleadvisor.CattleAdvisorScreen
+import com.google.ai.edge.gallery.ui.cattleadvisor.CattleAdvisorViewModel
 import com.google.ai.edge.gallery.ui.diseasescanning.DiseaseScanningDestination
 import com.google.ai.edge.gallery.ui.diseasescanning.DiseaseScanningScreen
 import com.google.ai.edge.gallery.ui.diseasescanning.DiseaseScanningViewModel
@@ -152,12 +156,43 @@ fun GalleryNavHost(
     modelManagerViewModel = modelManagerViewModel,
     tosViewModel = hiltViewModel(),
     navigateToTaskScreen = { task ->
-      pickedTask = task
-      showModelManager = true
-      firebaseAnalytics?.logEvent(
-        "capability_select",
-        bundleOf("capability_name" to task.type.toString()),
-      )
+      // Special handling for Cattle Advisor - skip model selection
+      if (task.type == TaskType.LLM_CATTLE_ADVISOR) {
+        navController.navigate(CattleAdvisorDestination.route)
+        firebaseAnalytics?.logEvent(
+          "capability_select",
+          bundleOf("capability_name" to task.type.toString()),
+        )
+      } else if (task.type == TaskType.LLM_ASK_IMAGE) {
+        // Special handling for Ask Disease - automatically select LoRa model and skip model selection
+        val loraModel = task.models.find { 
+          it.name.lowercase().contains("lora") && 
+          it.name.lowercase().contains("ddx")
+        }
+        if (loraModel != null) {
+          navController.navigate("${LlmAskImageDestination.route}/${loraModel.name}")
+          firebaseAnalytics?.logEvent(
+            "capability_select",
+            bundleOf("capability_name" to task.type.toString()),
+          )
+        } else {
+          // Fallback to model selection if LoRa model not found
+          pickedTask = task
+          showModelManager = true
+          firebaseAnalytics?.logEvent(
+            "capability_select",
+            bundleOf("capability_name" to task.type.toString()),
+          )
+        }
+      } else {
+        // For all other tasks, show model manager first
+        pickedTask = task
+        showModelManager = true
+        firebaseAnalytics?.logEvent(
+          "capability_select",
+          bundleOf("capability_name" to task.type.toString()),
+        )
+      }
     },
   )
 
@@ -314,6 +349,21 @@ fun GalleryNavHost(
         )
       }
     }
+
+    // Cattle advisor.
+    composable(
+      route = CattleAdvisorDestination.route,
+      enterTransition = { slideEnter() },
+      exitTransition = { slideExit() },
+    ) { backStackEntry ->
+      val viewModel: CattleAdvisorViewModel = hiltViewModel()
+
+      CattleAdvisorScreen(
+        viewModel = viewModel,
+        modelManagerViewModel = modelManagerViewModel,
+        navigateUp = { navController.navigateUp() },
+      )
+    }
   }
 
   // Handle incoming intents for deep links
@@ -348,6 +398,7 @@ fun navigateToTaskScreen(
     TaskType.LLM_ASK_AUDIO -> navController.navigate("${LlmAskAudioDestination.route}/${modelName}")
     TaskType.LLM_FUNCTION_CALLING -> navController.navigate("${FunctionCallingDestination.route}/${modelName}")
     TaskType.LLM_DISEASE_SCANNING -> navController.navigate("${DiseaseScanningDestination.route}/${modelName}")
+    TaskType.LLM_CATTLE_ADVISOR -> navController.navigate(CattleAdvisorDestination.route)
     TaskType.LLM_PROMPT_LAB ->
       navController.navigate("${LlmSingleTurnDestination.route}/${modelName}")
     TaskType.TEST_TASK_1 -> {}

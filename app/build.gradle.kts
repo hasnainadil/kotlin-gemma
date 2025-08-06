@@ -112,6 +112,11 @@ dependencies {
   androidTestImplementation(libs.hilt.android.testing)
   debugImplementation(libs.androidx.ui.tooling)
   debugImplementation(libs.androidx.ui.test.manifest)
+  implementation("com.squareup.retrofit2:retrofit:3.0.0")
+
+  implementation("com.squareup.retrofit2:converter-gson:3.0.0") // Gson converter for Retrofit
+
+  implementation("com.squareup.retrofit2:converter-scalars:2.9.0") // Scalars converter for Retrofit (e.g., for plain text responses)
 }
 
 protobuf {

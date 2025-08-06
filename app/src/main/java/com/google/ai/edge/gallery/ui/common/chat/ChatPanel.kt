@@ -477,7 +477,7 @@ fun ChatPanel(
           MessageBodyInfo(
             ChatMessageInfo(
               content =
-                "To get started, click + below to add images (up to 10 in a single session) and type a prompt to ask a question about it."
+                "Enter the symptoms and upload images of the affected areas on the cow to begin."
             ),
             smallFontSize = false,
           )

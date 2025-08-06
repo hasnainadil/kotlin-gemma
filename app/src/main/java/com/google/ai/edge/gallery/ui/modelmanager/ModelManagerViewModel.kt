@@ -37,17 +37,16 @@ import com.google.ai.edge.gallery.data.ModelAllowlist
 import com.google.ai.edge.gallery.data.ModelDownloadStatus
 import com.google.ai.edge.gallery.data.ModelDownloadStatusType
 import com.google.ai.edge.gallery.data.TASKS
-import com.google.ai.edge.gallery.data.TASK_LLM_ASK_AUDIO
 import com.google.ai.edge.gallery.data.TASK_LLM_ASK_IMAGE
-import com.google.ai.edge.gallery.data.TASK_LLM_CHAT
 import com.google.ai.edge.gallery.data.TASK_LLM_FUNCTION_CALLING
-import com.google.ai.edge.gallery.data.TASK_LLM_PROMPT_LAB
 import com.google.ai.edge.gallery.data.TASK_LLM_DISEASE_SCANNING
+import com.google.ai.edge.gallery.data.TASK_LLM_CATTLE_ADVISOR
 import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.data.TaskType
 import com.google.ai.edge.gallery.data.createLlmChatConfigs
 import com.google.ai.edge.gallery.data.getModelByName
 import com.google.ai.edge.gallery.data.processTasks
+import com.google.ai.edge.gallery.nutrition.NutritionModelFactory
 import com.google.ai.edge.gallery.proto.AccessTokenData
 import com.google.ai.edge.gallery.proto.ImportedModel
 import com.google.ai.edge.gallery.proto.Theme
@@ -289,16 +288,18 @@ constructor(
         }
       }
       when (task.type) {
-        TaskType.LLM_CHAT,
         TaskType.LLM_ASK_IMAGE,
-        TaskType.LLM_ASK_AUDIO,
-        TaskType.LLM_PROMPT_LAB,
         TaskType.LLM_FUNCTION_CALLING,
-        TaskType.LLM_DISEASE_SCANNING ->
+        TaskType.LLM_DISEASE_SCANNING,
+        TaskType.LLM_CATTLE_ADVISOR ->
           LlmChatModelHelper.initialize(context = context, model = model, onDone = onDone)
 
         TaskType.TEST_TASK_1 -> {}
         TaskType.TEST_TASK_2 -> {}
+        else -> {
+          // Handle any other task types with LLM initialization
+          LlmChatModelHelper.initialize(context = context, model = model, onDone = onDone)
+        }
       }
     }
   }
@@ -313,7 +314,8 @@ constructor(
         TaskType.LLM_ASK_IMAGE,
         TaskType.LLM_ASK_AUDIO,
         TaskType.LLM_FUNCTION_CALLING,
-        TaskType.LLM_DISEASE_SCANNING -> LlmChatModelHelper.cleanUp(model = model)
+        TaskType.LLM_DISEASE_SCANNING,
+        TaskType.LLM_CATTLE_ADVISOR -> LlmChatModelHelper.cleanUp(model = model)
 
         TaskType.TEST_TASK_1 -> {}
         TaskType.TEST_TASK_2 -> {}
@@ -421,22 +423,30 @@ constructor(
     // Create model.
     val model = createModelFromImportedModelInfo(info = info)
 
-    for (task in
-      listOf(TASK_LLM_ASK_IMAGE, TASK_LLM_ASK_AUDIO, TASK_LLM_PROMPT_LAB, TASK_LLM_CHAT)) {
-      // Remove duplicated imported model if existed.
+    // Handle all tasks now - remove duplicated models from all tasks
+    val modelNameLower = model.name.lowercase()
+    
+    // Remove duplicated imported model if existed in all tasks
+    for (task in listOf(TASK_LLM_ASK_IMAGE, TASK_LLM_FUNCTION_CALLING, TASK_LLM_DISEASE_SCANNING, TASK_LLM_CATTLE_ADVISOR)) {
       val modelIndex = task.models.indexOfFirst { info.fileName == it.name && it.imported }
       if (modelIndex >= 0) {
-        Log.d(TAG, "duplicated imported model found in task. Removing it first")
+        Log.d(TAG, "duplicated imported model found in ${task.type.label} task. Removing it first")
         task.models.removeAt(modelIndex)
       }
-      if (
-        (task == TASK_LLM_ASK_IMAGE && model.llmSupportImage) ||
-          (task == TASK_LLM_ASK_AUDIO && model.llmSupportAudio) ||
-          (task != TASK_LLM_ASK_IMAGE && task != TASK_LLM_ASK_AUDIO)
-      ) {
-        task.models.add(model)
-      }
-      task.updateTrigger.value = System.currentTimeMillis()
+    }
+    
+    // Only add LoRa DDX models to all tasks
+    if (modelNameLower.contains("lora") && modelNameLower.contains("ddx")) {
+      TASK_LLM_ASK_IMAGE.models.add(model)
+      TASK_LLM_FUNCTION_CALLING.models.add(model)
+      TASK_LLM_DISEASE_SCANNING.models.add(model)
+      TASK_LLM_CATTLE_ADVISOR.models.add(model)
+      
+      // Update triggers for all tasks
+      TASK_LLM_ASK_IMAGE.updateTrigger.value = System.currentTimeMillis()
+      TASK_LLM_FUNCTION_CALLING.updateTrigger.value = System.currentTimeMillis()
+      TASK_LLM_DISEASE_SCANNING.updateTrigger.value = System.currentTimeMillis()
+      TASK_LLM_CATTLE_ADVISOR.updateTrigger.value = System.currentTimeMillis()
     }
 
     // Add initial status and states.
@@ -652,11 +662,11 @@ constructor(
 
         // Try to read the test allowlist first.
         Log.d(TAG, "Loading test model allowlist.")
-        modelAllowlist = readModelAllowlistFromDisk(fileName = MODEL_ALLOWLIST_TEST_FILENAME)
+        modelAllowlist = null
         if (modelAllowlist == null) {
           // Load from github.
           val url =
-            "https://raw.githubusercontent.com/google-ai-edge/gallery/refs/heads/main/model_allowlists/${BuildConfig.VERSION_NAME.replace(".", "_")}.json"
+            "https://huggingface.co/Irtiaz/LoRa-DDX/raw/main/models.json"
           Log.d(TAG, "Loading model allowlist from internet. Url: $url")
           val data = getJsonResponse<ModelAllowlist>(url = url)
           modelAllowlist = data?.jsonObj
@@ -680,38 +690,39 @@ constructor(
         Log.d(TAG, "Allowlist: $modelAllowlist")
 
         // Convert models in the allowlist.
-        TASK_LLM_CHAT.models.clear()
-        TASK_LLM_PROMPT_LAB.models.clear()
         TASK_LLM_ASK_IMAGE.models.clear()
-        TASK_LLM_ASK_AUDIO.models.clear()
         TASK_LLM_FUNCTION_CALLING.models.clear()
+        TASK_LLM_DISEASE_SCANNING.models.clear()
+        TASK_LLM_CATTLE_ADVISOR.models.clear()
+        
         for (allowedModel in modelAllowlist.models) {
           if (allowedModel.disabled == true) {
             continue
           }
 
           val model = allowedModel.toModel()
-          if (allowedModel.taskTypes.contains(TASK_LLM_CHAT.type.id)) {
-            TASK_LLM_CHAT.models.add(model)
-          }
-          if (allowedModel.taskTypes.contains(TASK_LLM_PROMPT_LAB.type.id)) {
-            TASK_LLM_PROMPT_LAB.models.add(model)
-          }
-          if (allowedModel.taskTypes.contains(TASK_LLM_ASK_IMAGE.type.id)) {
+          
+          // Only process LoRa DDX models for ALL tasks
+          val modelNameLower = model.name.lowercase()
+          
+          // Add LoRa DDX model to ALL tasks - this ensures only these 2 models exist
+          if (modelNameLower.contains("lora") && modelNameLower.contains("ddx")) {
             TASK_LLM_ASK_IMAGE.models.add(model)
-          }
-          if (allowedModel.taskTypes.contains(TASK_LLM_ASK_AUDIO.type.id)) {
-            TASK_LLM_ASK_AUDIO.models.add(model)
-          }
-          // Add Gemma models to function calling task
-          if (model.name.lowercase().contains("gemma")) {
             TASK_LLM_FUNCTION_CALLING.models.add(model)
             TASK_LLM_DISEASE_SCANNING.models.add(model)
+            TASK_LLM_CATTLE_ADVISOR.models.add(model)
           }
         }
 
         // Pre-process all tasks.
         processTasks()
+        
+        // Add the nutrition model to ALL tasks (at the beginning)
+        val nutritionModel = NutritionModelFactory.createNutritionModel()
+        TASK_LLM_ASK_IMAGE.models.add(0, nutritionModel)
+        TASK_LLM_FUNCTION_CALLING.models.add(0, nutritionModel)
+        TASK_LLM_DISEASE_SCANNING.models.add(0, nutritionModel)
+        TASK_LLM_CATTLE_ADVISOR.models.add(0, nutritionModel)
 
         // Update UI state.
         val newUiState = createUiState()
@@ -791,18 +802,15 @@ constructor(
       // Create model.
       val model = createModelFromImportedModelInfo(info = importedModel)
 
-      // Add to task.
-      TASK_LLM_CHAT.models.add(model)
-      TASK_LLM_PROMPT_LAB.models.add(model)
-      if (model.llmSupportImage) {
+      // Add to all tasks if it's a LoRa DDX model
+      val modelNameLower = model.name.lowercase()
+      
+      // Only add LoRa DDX models to all tasks for clean workflow
+      if (modelNameLower.contains("lora") && modelNameLower.contains("ddx")) {
         TASK_LLM_ASK_IMAGE.models.add(model)
-      }
-      if (model.llmSupportAudio) {
-        TASK_LLM_ASK_AUDIO.models.add(model)
-      }
-      // Add imported Gemma models to function calling task
-      if (model.name.lowercase().contains("gemma")) {
         TASK_LLM_FUNCTION_CALLING.models.add(model)
+        TASK_LLM_DISEASE_SCANNING.models.add(model)
+        TASK_LLM_CATTLE_ADVISOR.models.add(model)
       }
 
       // Update status.

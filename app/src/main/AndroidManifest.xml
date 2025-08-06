@@ -43,10 +43,11 @@
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
-        android:label="Edge Gallery"
+        android:label="GemmaVetCare"
         android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true"
         android:theme="@style/Theme.Gallery"
+        android:enableOnBackInvokedCallback="true"
         tools:targetApi="31">
 
         <uses-native-library android:name="libOpenCL.so" android:required="false"/>
