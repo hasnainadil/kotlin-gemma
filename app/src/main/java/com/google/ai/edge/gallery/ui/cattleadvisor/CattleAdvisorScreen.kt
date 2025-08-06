@@ -116,7 +116,7 @@ fun CattleAdvisorScreen(
                 // Input form
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                 ) {
                 Column(
                     modifier = Modifier.padding(16.dp)
@@ -320,7 +320,7 @@ private fun CattleAdvisorResultCard(
         modifier = modifier
             .fillMaxWidth()
             .clickable { showFullScreen = true },
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+//        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(
             modifier = Modifier.padding(16.dp)
@@ -460,7 +460,7 @@ private fun FullScreenAnalysisCard(
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp), // Reduced shadow
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer
                 )
@@ -520,7 +520,7 @@ private fun FullScreenAnalysisCard(
             if (result.isLoading) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp), // Reduced shadow
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
                     )
@@ -570,7 +570,7 @@ private fun FullScreenAnalysisCard(
                 // Final recommendation in beautiful format
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp), // Reduced shadow
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
@@ -677,7 +677,7 @@ private fun FullScreenAnalysisDialog(
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.primaryContainer
                     )
@@ -737,7 +737,7 @@ private fun FullScreenAnalysisDialog(
                 if (result.isLoading) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
                         )
@@ -781,7 +781,7 @@ private fun FullScreenAnalysisDialog(
                     // Final recommendation in beautiful format
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
                         shape = RoundedCornerShape(16.dp),
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
@@ -839,31 +839,38 @@ private fun CattleStatCard(
     color: androidx.compose.ui.graphics.Color
 ) {
     Card(
-        modifier = Modifier.width(110.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        modifier = Modifier
+            .width(110.dp)
+            .height(90.dp), // Fixed height for consistency
+//        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp), // Reduced shadow
         colors = CardDefaults.cardColors(
             containerColor = color.copy(alpha = 0.1f)
         ),
         shape = RoundedCornerShape(12.dp)
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(12.dp), // Reduced padding
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center // Center content vertically
         ) {
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelMedium,
                 color = color,
                 fontWeight = FontWeight.SemiBold,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                maxLines = 2 // Allow text to wrap if needed
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp)) // Reduced spacing
             Text(
                 text = value,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                maxLines = 2 // Allow text to wrap if needed
             )
         }
     }
@@ -882,7 +889,7 @@ private fun UnavailableIngredientsCard(
     
     Card(
         modifier = modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp), // Reduced shadow
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f)
         )

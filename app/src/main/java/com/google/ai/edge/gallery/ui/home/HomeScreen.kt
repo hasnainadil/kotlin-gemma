@@ -679,8 +679,8 @@ private fun TaskCard(task: Task, index: Int, onClick: () -> Unit, modifier: Modi
   val modelCountLabel by remember {
     derivedStateOf {
       when (modelCount) {
-        1 -> "1 Model"
-        else -> "%d Models".format(modelCount)
+        1 -> ""
+         else -> ""
       }
     }
   }
