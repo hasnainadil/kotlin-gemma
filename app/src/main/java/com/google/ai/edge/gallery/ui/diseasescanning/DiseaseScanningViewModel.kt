@@ -31,6 +31,7 @@ import com.google.ai.edge.gallery.ui.llmchat.LlmChatModelHelper
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -50,6 +51,13 @@ class DiseaseScanningViewModel @Inject constructor() : ViewModel() {
 
     var isScanning by mutableStateOf(false)
         private set
+
+    override fun onCleared() {
+        super.onCleared()
+        Log.d(TAG, "ViewModel being cleared, cleaning up scan results")
+        _scanResults.clear()
+        isScanning = false
+    }
 
     fun scanImage(context: Context, modelManagerViewModel: ModelManagerViewModel, model: Model, image: Bitmap) {
         Log.d(TAG, "Starting disease scan for image")
@@ -71,8 +79,14 @@ class DiseaseScanningViewModel @Inject constructor() : ViewModel() {
                     )
                     
                     // Wait for the model to be initialized
-                    while (model.instance == null) {
+                    while (model.instance == null && isActive) {
                         kotlinx.coroutines.delay(100)
+                    }
+                    
+                    // Check if the coroutine was cancelled during model initialization
+                    if (!isActive) {
+                        Log.d(TAG, "Coroutine cancelled during model initialization")
+                        return@launch
                     }
                 }
                 
@@ -94,35 +108,42 @@ class DiseaseScanningViewModel @Inject constructor() : ViewModel() {
                     input = prompt,
                     images = listOf(image),
                     resultListener = { partialResult, done ->
-                        // Update the loading result with partial response by concatenating
-                        val index = _scanResults.indexOfLast { it.image == image }
-                        if (index >= 0) {
-                            val currentResult = _scanResults[index]
-                            val newContent = currentResult.result + partialResult
-                            _scanResults[index] = currentResult.copy(
-                                result = newContent,
-                                isLoading = !done
-                            )
-                        }
-                        if (done) {
-                            isScanning = false
-                            Log.d(TAG, "Disease scan completed")
+                        // Check if we're still active before updating UI
+                        if (isActive) {
+                            // Update the loading result with partial response by concatenating
+                            val index = _scanResults.indexOfLast { it.image == image }
+                            if (index >= 0 && index < _scanResults.size) {
+                                val currentResult = _scanResults[index]
+                                val newContent = currentResult.result + partialResult
+                                _scanResults[index] = currentResult.copy(
+                                    result = newContent,
+                                    isLoading = !done
+                                )
+                            }
+                            if (done) {
+                                isScanning = false
+                                Log.d(TAG, "Disease scan completed")
+                            }
                         }
                     },
                     cleanUpListener = {
-                        isScanning = false
+                        if (isActive) {
+                            isScanning = false
+                        }
                     }
                 )
             } catch (e: Exception) {
-                val index = _scanResults.indexOfLast { it.image == image }
-                if (index >= 0) {
-                    _scanResults[index] = _scanResults[index].copy(
-                        result = "Error: ${e.message}",
-                        isLoading = false
-                    )
+                if (isActive) {
+                    val index = _scanResults.indexOfLast { it.image == image }
+                    if (index >= 0 && index < _scanResults.size) {
+                        _scanResults[index] = _scanResults[index].copy(
+                            result = "Error: ${e.message}",
+                            isLoading = false
+                        )
+                    }
+                    isScanning = false
+                    Log.e(TAG, "Disease scan exception", e)
                 }
-                isScanning = false
-                Log.e(TAG, "Disease scan exception", e)
             }
         }
     }

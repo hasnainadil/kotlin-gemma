@@ -164,7 +164,7 @@ val TASK_LLM_CATTLE_ADVISOR =
 
 /** All tasks. */
 val TASKS: List<Task> =
-  listOf(TASK_LLM_ASK_IMAGE, TASK_LLM_FUNCTION_CALLING, TASK_LLM_DISEASE_SCANNING, TASK_LLM_CATTLE_ADVISOR)
+  listOf(TASK_LLM_DISEASE_SCANNING, TASK_LLM_CATTLE_ADVISOR)
 
 fun getModelByName(name: String): Model? {
   for (task in TASKS) {

@@ -39,6 +39,26 @@ class CattleNutritionService private constructor() {
         }
     }
     
+    // Feed ingredients database matching Python implementation
+    private val feedIngredients = mapOf(
+        "Alfalfa Hay" to FeedIngredient(tdn = 58, nem = 0.50, neg = 0.30, cp = 17, ca = 1.20, p = 0.22),
+        "Corn Silage" to FeedIngredient(tdn = 65, nem = 0.60, neg = 0.35, cp = 8, ca = 0.30, p = 0.22),
+        "Soybean Meal (48%)" to FeedIngredient(tdn = 82, nem = 0.70, neg = 0.40, cp = 48, ca = 0.30, p = 0.65),
+        "Ground Corn" to FeedIngredient(tdn = 88, nem = 0.90, neg = 0.65, cp = 9, ca = 0.02, p = 0.28),
+        "Dicalcium Phosphate" to FeedIngredient(tdn = 0, nem = 0.0, neg = 0.0, cp = 0, ca = 23.00, p = 18.00),
+        "Trace Mineral Mix" to FeedIngredient(tdn = 0, nem = 0.0, neg = 0.0, cp = 0, ca = 12.00, p = 8.00),
+        "Salt" to FeedIngredient(tdn = 0, nem = 0.0, neg = 0.0, cp = 0, ca = 0.00, p = 0.00)
+    )
+    
+    data class FeedIngredient(
+        val tdn: Int,      // Total Digestible Nutrients (%)
+        val nem: Double,   // Net Energy for Maintenance (Mcal/lb)
+        val neg: Double,   // Net Energy for Gain (Mcal/lb)
+        val cp: Int,       // Crude Protein (%)
+        val ca: Double,    // Calcium (%)
+        val p: Double      // Phosphorus (%)
+    )
+    
     /**
      * Initialize the nutrition service with models from assets
      */
@@ -175,6 +195,64 @@ class CattleNutritionService private constructor() {
             Log.e(TAG, "Error during nutrition analysis", e)
             NutritionAnalysisResult.error("Analysis failed: ${e.message}")
         }
+    }
+    
+    /**
+     * Generate LLM prompt for feed recommendations based on nutrition predictions
+     * Matches the Python implementation workflow
+     */
+    fun generateFeedRecommendationPrompt(
+        prediction: NutritionPrediction,
+        unavailableIngredients: List<String> = emptyList()
+    ): String {
+        val prompt = StringBuilder()
+        
+        prompt.append("You are an expert cattle nutritionist.\n\n")
+        
+        prompt.append("A cow needs the following nutrients per day:\n")
+        prompt.append("- Dry Matter Intake (DMI): ${String.format("%.1f", prediction.dryMatterIntake)} lbs\n")
+        prompt.append("- Total Digestible Nutrients (TDN): ${String.format("%.1f", prediction.tdnPercentage)}% of DM (${String.format("%.1f", prediction.tdnLbs)} lbs)\n")
+        prompt.append("- Net Energy for Maintenance (NEm): ${String.format("%.2f", prediction.nemPerLb)} Mcal/lb (${String.format("%.1f", prediction.nemMcal)} Mcal)\n")
+        prompt.append("- Net Energy for Gain (NEg): ${String.format("%.2f", prediction.negPerLb)} Mcal/lb (${String.format("%.1f", prediction.negMcal)} Mcal)\n")
+        prompt.append("- Crude Protein (CP): ${String.format("%.1f", prediction.cpPercentage)}% of DM (${String.format("%.2f", prediction.cpLbs)} lbs)\n")
+        prompt.append("- Calcium (Ca): ${String.format("%.2f", prediction.caPercentage)}% of DM (${String.format("%.0f", prediction.caGrams)} g)\n")
+        prompt.append("- Phosphorus (P): ${String.format("%.2f", prediction.pPercentage)}% of DM (${String.format("%.0f", prediction.pGrams)} g)\n\n")
+        
+        prompt.append("Here is a list of available feed ingredients and their nutrient values per pound of dry matter:\n\n")
+        prompt.append("| Feed Ingredient        | TDN (%) | NEm (Mcal/lb) | NEg (Mcal/lb) | CP (%) | Ca (%) | P (%) |\n")
+        prompt.append("|------------------------|---------|----------------|----------------|--------|--------|--------|\n")
+        
+        // Add available ingredients (excluding unavailable ones)
+        val availableIngredients = feedIngredients.filterKeys { ingredientName ->
+            !unavailableIngredients.contains(ingredientName)
+        }
+        
+        for ((name, ingredient) in availableIngredients) {
+            prompt.append("| ${name.padEnd(20)} | ${ingredient.tdn.toString().padEnd(7)} | ${String.format("%.2f", ingredient.nem).padEnd(12)} | ${String.format("%.2f", ingredient.neg).padEnd(12)} | ${ingredient.cp.toString().padEnd(6)} | ${String.format("%.2f", ingredient.ca).padEnd(6)} | ${String.format("%.2f", ingredient.p).padEnd(6)} |\n")
+        }
+        
+        prompt.append("\n**Your Task:**\n")
+        prompt.append("- Design a realistic daily feed menu of 5 to 7 ingredients from the available ingredients.\n")
+        prompt.append("- Show quantity of each ingredient in pounds of dry matter.\n")
+        prompt.append("- Calculate and show the contribution of each to total TDN, NEm, NEg, CP, Ca, and P.\n")
+        prompt.append("- Ensure the totals are as close as possible to the cow's requirements above.\n")
+        prompt.append("- Keep the ingredients reasonable and commonly used.\n")
+        
+        if (unavailableIngredients.isNotEmpty()) {
+            prompt.append("\nNote: The following ingredients are not available: ${unavailableIngredients.joinToString(", ")}. Please adjust the feed menu accordingly.\n")
+        }
+        
+        prompt.append("\nReturn a table like this:\n\n")
+        prompt.append("| Ingredient            | Amount (lbs DM) | TDN (lbs) | NEm (Mcal) | NEg (Mcal) | CP (lbs) | Ca (g) | P (g) |\n")
+        prompt.append("|-----------------------|------------------|------------|-------------|-------------|----------|--------|--------|\n")
+        prompt.append("| Feed 1                |                  |            |             |             |          |        |        |\n")
+        prompt.append("| ...                   |                  |            |             |             |          |        |        |\n")
+        prompt.append("| **Total**             | ${String.format("%.1f", prediction.dryMatterIntake)} | ${String.format("%.1f", prediction.tdnLbs)} | ${String.format("%.1f", prediction.nemMcal)} | ${String.format("%.1f", prediction.negMcal)} | ${String.format("%.2f", prediction.cpLbs)} | ${String.format("%.0f", prediction.caGrams)} | ${String.format("%.0f", prediction.pGrams)} |\n\n")
+        
+        prompt.append("After your table, list any assumptions or notes you made.\n\n")
+        prompt.append("Start your response with: \"Here is the feed menu that meets the cow's nutrient needs.\"\n")
+        
+        return prompt.toString()
     }
     
     /**

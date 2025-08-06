@@ -716,27 +716,21 @@ constructor(
           // Add models to specialized tasks based on capabilities and name patterns
           val modelNameLower = model.name.lowercase()
           
-          // Add Gemma models to function calling, disease scanning, and cattle advisor tasks
+          // Add Gemma models to function calling task only (removed from cattle advisor)
           if (modelNameLower.contains("gemma")) {
             TASK_LLM_FUNCTION_CALLING.models.add(model)
-            TASK_LLM_DISEASE_SCANNING.models.add(model)
-            TASK_LLM_CATTLE_ADVISOR.models.add(model)
+            // Removed: TASK_LLM_CATTLE_ADVISOR.models.add(model)
           }
           
-          // Add LoRa disease detection model to disease scanning task
-          if (modelNameLower.contains("lora") && modelNameLower.contains("ddx")) {
+          // Add only the specific LoRa disease detection model to disease scanning task
+          if (modelNameLower.contains("lora-3n-ddx-ft-int4")) {
             TASK_LLM_DISEASE_SCANNING.models.add(model)
-            // LoRa DDX is also good for cattle advisor as it's specialized for livestock
-            TASK_LLM_CATTLE_ADVISOR.models.add(model)
           }
           
-          // Add all image-capable models to disease scanning (since it's image-based analysis)
-          if (model.llmSupportImage) {
-            // Only add if not already added above
-            if (!TASK_LLM_DISEASE_SCANNING.models.contains(model)) {
-              TASK_LLM_DISEASE_SCANNING.models.add(model)
-            }
-          }
+          // Removed LoRa DDX models from cattle advisor - only nutrition model will be available
+          // if (modelNameLower.contains("lora") && modelNameLower.contains("ddx")) {
+          //   TASK_LLM_CATTLE_ADVISOR.models.add(model)
+          // }
         }
 
         // Pre-process all tasks.
@@ -811,7 +805,16 @@ constructor(
     val modelInstances: MutableMap<String, ModelInitializationStatus> = mutableMapOf()
     for (task in TASKS) {
       for (model in task.models) {
-        modelDownloadStatus[model.name] = getModelDownloadStatus(model = model)
+        // Special handling for nutrition model - mark as already loaded
+        if (NutritionModelFactory.isNutritionModel(model)) {
+          modelDownloadStatus[model.name] = ModelDownloadStatus(
+            status = ModelDownloadStatusType.SUCCEEDED,
+            receivedBytes = 27_000_000L, // ~27MB
+            totalBytes = 27_000_000L,
+          )
+        } else {
+          modelDownloadStatus[model.name] = getModelDownloadStatus(model = model)
+        }
         modelInstances[model.name] =
           ModelInitializationStatus(status = ModelInitializationStatusType.NOT_INITIALIZED)
       }
@@ -837,23 +840,21 @@ constructor(
       // Add to specialized tasks based on model capabilities and name patterns
       val modelNameLower = model.name.lowercase()
       
-      // Add imported Gemma models to specialized tasks
+      // Add imported Gemma models to function calling task only (removed from cattle advisor)
       if (modelNameLower.contains("gemma")) {
         TASK_LLM_FUNCTION_CALLING.models.add(model)
-        TASK_LLM_DISEASE_SCANNING.models.add(model)
-        TASK_LLM_CATTLE_ADVISOR.models.add(model)
+        // Removed: TASK_LLM_CATTLE_ADVISOR.models.add(model)
       }
       
-      // Add imported LoRa disease detection model to disease scanning and cattle advisor
-      if (modelNameLower.contains("lora") && modelNameLower.contains("ddx")) {
+      // Add only the specific LoRa disease detection model to disease scanning
+      if (modelNameLower.contains("lora-3n-ddx-ft-int4")) {
         TASK_LLM_DISEASE_SCANNING.models.add(model)
-        TASK_LLM_CATTLE_ADVISOR.models.add(model)
       }
       
-      // Add all image-capable imported models to disease scanning
-      if (model.llmSupportImage && !TASK_LLM_DISEASE_SCANNING.models.contains(model)) {
-        TASK_LLM_DISEASE_SCANNING.models.add(model)
-      }
+      // Removed imported LoRa DDX models from cattle advisor - only nutrition model will be available
+      // if (modelNameLower.contains("lora") && modelNameLower.contains("ddx")) {
+      //   TASK_LLM_CATTLE_ADVISOR.models.add(model)
+      // }
 
       // Update status.
       modelDownloadStatus[model.name] =

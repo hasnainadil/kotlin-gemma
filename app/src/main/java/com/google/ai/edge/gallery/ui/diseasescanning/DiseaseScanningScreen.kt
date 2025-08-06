@@ -56,8 +56,11 @@ import com.google.ai.edge.gallery.GalleryTopAppBar
 import com.google.ai.edge.gallery.data.AppBarAction
 import com.google.ai.edge.gallery.data.AppBarActionType
 import com.google.ai.edge.gallery.data.Model
+import com.google.ai.edge.gallery.data.ModelDownloadStatusType
+import com.google.ai.edge.gallery.data.TASK_LLM_DISEASE_SCANNING
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
 import com.google.ai.edge.gallery.ui.common.chat.ModelSelector
+import com.google.ai.edge.gallery.ui.common.chat.ModelDownloadStatusInfoPanel
 import com.google.ai.edge.gallery.ui.common.ConfigDialog
 import com.google.ai.edge.gallery.common.getBitmapFromUri
 import kotlinx.coroutines.launch
@@ -88,6 +91,29 @@ fun DiseaseScanningScreen(
     // State for image source selection dialog
     var showImageSourceDialog by remember { mutableStateOf(false) }
     
+    // Track navigation state to prevent double navigation
+    var isNavigating by remember { mutableStateOf(false) }
+    
+    // Safe navigation function that prevents double navigation
+    val safeNavigateUp = {
+        if (!isNavigating) {
+            isNavigating = true
+            try {
+                navigateUp()
+            } catch (e: Exception) {
+                Log.e("DiseaseScanningScreen", "Error during navigation: ${e.message}", e)
+                isNavigating = false
+            }
+        }
+    }
+    
+    // Add cleanup when the composable leaves the composition
+    DisposableEffect(Unit) {
+        onDispose {
+            Log.d("DiseaseScanningScreen", "Screen disposed, cleaning up")
+        }
+    }
+    
     // Create a file URI for camera capture
     val createImageUri = {
         try {
@@ -115,8 +141,12 @@ fun DiseaseScanningScreen(
     // Auto-scroll to bottom when new results are added
     LaunchedEffect(scanResults.size) {
         if (scanResults.isNotEmpty()) {
-            coroutineScope.launch {
-                listState.animateScrollToItem(scanResults.size - 1)
+            try {
+                coroutineScope.launch {
+                    listState.animateScrollToItem(scanResults.size - 1)
+                }
+            } catch (e: Exception) {
+                Log.e("DiseaseScanningScreen", "Error during auto-scroll: ${e.message}", e)
             }
         }
     }
@@ -125,13 +155,18 @@ fun DiseaseScanningScreen(
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
-        if (success && cameraUri != null) {
-            val bitmap = getBitmapFromUri(context, cameraUri!!)
-            bitmap?.let { bitmapResult ->
-                currentModel?.let { model ->
-                    viewModel.scanImage(context, modelManagerViewModel, model, bitmapResult)
+        try {
+            if (success && cameraUri != null) {
+                val bitmap = getBitmapFromUri(context, cameraUri!!)
+                bitmap?.let { bitmapResult ->
+                    currentModel?.let { model ->
+                        viewModel.scanImage(context, modelManagerViewModel, model, bitmapResult)
+                    }
                 }
             }
+        } catch (e: Exception) {
+            Log.e("DiseaseScanningScreen", "Error processing camera result: ${e.message}", e)
+            Toast.makeText(context, "Error processing image", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -157,13 +192,18 @@ fun DiseaseScanningScreen(
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        uri?.let { imageUri ->
-            val bitmap = getBitmapFromUri(context, imageUri)
-            bitmap?.let { bitmapResult ->
-                currentModel?.let { model ->
-                    viewModel.scanImage(context, modelManagerViewModel, model, bitmapResult)
+        try {
+            uri?.let { imageUri ->
+                val bitmap = getBitmapFromUri(context, imageUri)
+                bitmap?.let { bitmapResult ->
+                    currentModel?.let { model ->
+                        viewModel.scanImage(context, modelManagerViewModel, model, bitmapResult)
+                    }
                 }
             }
+        } catch (e: Exception) {
+            Log.e("DiseaseScanningScreen", "Error processing gallery result: ${e.message}", e)
+            Toast.makeText(context, "Error processing image", Toast.LENGTH_SHORT).show()
         }
     }
     
@@ -197,32 +237,56 @@ fun DiseaseScanningScreen(
                 title = "Disease Scanning",
                 leftAction = AppBarAction(
                     actionType = AppBarActionType.NAVIGATE_UP,
-                    actionFn = navigateUp
+                    actionFn = safeNavigateUp
                 )
             )
         },
         floatingActionButton = {
-            // Settings FAB when model is available
+            // Settings FAB when model is available and downloaded
             currentModel?.let {
-                FloatingActionButton(
-                    onClick = { showConfigDialog = true },
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Settings,
-                        contentDescription = "Model Settings"
-                    )
+                val curDownloadStatus = modelManagerUiState.modelDownloadStatus[it.name]
+                val modelDownloaded = curDownloadStatus?.status == ModelDownloadStatusType.SUCCEEDED
+                if (modelDownloaded) {
+                    FloatingActionButton(
+                        onClick = { showConfigDialog = true },
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Model Settings"
+                        )
+                    }
                 }
             }
         },
         modifier = modifier
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(16.dp)
-        ) {
+        // Check if model is downloaded
+        val currentModel = modelManagerUiState.selectedModel
+        val curDownloadStatus = modelManagerUiState.modelDownloadStatus[currentModel?.name]
+        val modelDownloaded = curDownloadStatus?.status == ModelDownloadStatusType.SUCCEEDED
+        
+        if (!modelDownloaded && currentModel != null) {
+            // Show model download status panel when model is not ready
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+            ) {
+                ModelDownloadStatusInfoPanel(
+                    model = currentModel,
+                    task = TASK_LLM_DISEASE_SCANNING,
+                    modelManagerViewModel = modelManagerViewModel,
+                )
+            }
+        } else {
+            // Show main disease scanning UI when model is ready
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(16.dp)
+            ) {
             if (scanResults.isEmpty()) {
                 // Initial state - show scan button
                 Box(
@@ -233,7 +297,7 @@ fun DiseaseScanningScreen(
                         onClick = { showImagePicker() },
                         modifier = Modifier
                             .size(200.dp, 80.dp),
-                        enabled = !isScanning && currentModel != null
+                        enabled = !isScanning && currentModel != null && modelDownloaded
                     ) {
                         Icon(
                             imageVector = Icons.Default.PhotoCamera,
@@ -266,7 +330,7 @@ fun DiseaseScanningScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(56.dp),
-                            enabled = !isScanning && currentModel != null
+                            enabled = !isScanning && currentModel != null && modelDownloaded
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Add,
@@ -317,6 +381,7 @@ fun DiseaseScanningScreen(
                         color = MaterialTheme.colorScheme.onErrorContainer
                     )
                 }
+            }
             }
         }
     }

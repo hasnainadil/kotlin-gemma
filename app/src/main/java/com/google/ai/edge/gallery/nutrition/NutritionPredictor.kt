@@ -16,6 +16,7 @@
 
 package com.google.ai.edge.gallery.nutrition
 
+import android.content.Context
 import com.google.gson.*
 import com.google.gson.reflect.TypeToken
 import java.io.InputStream
@@ -122,6 +123,8 @@ class NutritionPredictor {
     private lateinit var featureScaler: StandardScaler
     private lateinit var targetScalers: Map<String, StandardScaler>
     
+    private var isLoaded = false
+    
     companion object {
         // Cattle type mapping
         const val GROWING_STEER_HEIFER = 0.0
@@ -138,7 +141,24 @@ class NutritionPredictor {
         }
     }
 
+    fun loadModels(context: Context): Boolean {
+        return try {
+            val inputStream = context.assets.open("nutrition_models.json")
+            loadModelsFromStream(inputStream)
+            isLoaded = true
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
     fun loadModels(inputStream: InputStream) {
+        loadModelsFromStream(inputStream)
+        isLoaded = true
+    }
+
+    private fun loadModelsFromStream(inputStream: InputStream) {
         val gson = Gson()
         val jsonString = inputStream.bufferedReader().use { it.readText() }
 
@@ -172,6 +192,10 @@ class NutritionPredictor {
     }
 
     fun predict(cattleType: String, targetWeight: Double, bodyWeight: Double, adg: Double): NutritionPrediction {
+        if (!isLoaded) {
+            throw IllegalStateException("Models not loaded. Call loadModels() first.")
+        }
+        
         val type = getCattleTypeValue(cattleType)
         
         // Create feature array
@@ -212,4 +236,33 @@ class NutritionPredictor {
             pGrams = predictions["P (grams)"] ?: 0.0
         )
     }
+
+    fun predictFormatted(cattleType: String, targetWeight: Double, bodyWeight: Double, adg: Double): String {
+        val prediction = predict(cattleType, targetWeight, bodyWeight, adg)
+        val result = StringBuilder()
+        result.append("# Nutrition Requirements\n\n")
+
+        result.append("**Intake Requirements:**\n")
+        result.append("• Dry Matter Intake: ${"%.2f".format(prediction.dryMatterIntake)} lbs/day\n")
+        result.append("• TDN: ${"%.2f".format(prediction.tdnLbs)} lbs\n")
+        result.append("\n")
+
+        result.append("**Energy Requirements:**\n")
+        result.append("• TDN: ${"%.1f".format(prediction.tdnPercentage)}% DM\n")
+        result.append("• NEm: ${"%.2f".format(prediction.nemPerLb)} Mcal/lb (${"%.2f".format(prediction.nemMcal)} Mcal total)\n")
+        result.append("• NEg: ${"%.2f".format(prediction.negPerLb)} Mcal/lb (${"%.2f".format(prediction.negMcal)} Mcal total)\n")
+        result.append("\n")
+
+        result.append("**Protein Requirements:**\n")
+        result.append("• Crude Protein: ${"%.1f".format(prediction.cpPercentage)}% DM (${"%.2f".format(prediction.cpLbs)} lbs)\n")
+        result.append("\n")
+
+        result.append("**Mineral Requirements:**\n")
+        result.append("• Calcium: ${"%.2f".format(prediction.caPercentage)}% DM (${"%.1f".format(prediction.caGrams)} grams)\n")
+        result.append("• Phosphorus: ${"%.2f".format(prediction.pPercentage)}% DM (${"%.1f".format(prediction.pGrams)} grams)\n")
+
+        return result.toString()
+    }
+
+    fun isModelLoaded(): Boolean = isLoaded
 }

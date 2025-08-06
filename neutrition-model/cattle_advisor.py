@@ -36,7 +36,7 @@ class CattleNutritionAdvisor:
         }
         
         # Feed ingredients database
-        self.feed_ingredients = {
+        hereself.feed_ingredients = {
             "Alfalfa Hay": {"TDN": 58, "NEm": 0.50, "NEg": 0.30, "CP": 17, "Ca": 1.20, "P": 0.22},
             "Corn Silage": {"TDN": 65, "NEm": 0.60, "NEg": 0.35, "CP": 8, "Ca": 0.30, "P": 0.22},
             "Soybean Meal (48%)": {"TDN": 82, "NEm": 0.70, "NEg": 0.40, "CP": 48, "Ca": 0.30, "P": 0.65},

@@ -20,9 +20,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.Clear
@@ -278,7 +276,9 @@ fun CattleAdvisorScreen(
                 LazyColumn(
                     state = listState,
                     verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
                 ) {
                     items(analysisResults.reversed()) { result ->
                         CattleAdvisorResultCard(result = result)
@@ -385,20 +385,14 @@ private fun CattleAdvisorResultCard(
                     Text(
                         text = result.recommendation,
                         style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .verticalScroll(rememberScrollState())
-                            .heightIn(max = 400.dp)
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             } else {
                 Text(
                     text = result.recommendation,
                     style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
-                        .heightIn(max = 400.dp)
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
         }

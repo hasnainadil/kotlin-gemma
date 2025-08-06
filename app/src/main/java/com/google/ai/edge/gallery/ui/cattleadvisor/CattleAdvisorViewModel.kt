@@ -100,6 +100,31 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
             return
         }
         
+        // Check if this is nutrition model workflow and validate LLM availability
+        if (NutritionModelFactory.isNutritionModel(model)) {
+            // For nutrition workflow, we need an LLM model to be available
+            val availableLLMs = modelManagerViewModel.uiState.value.tasks
+                .flatMap { it.models }
+                .filter { it != model && !NutritionModelFactory.isNutritionModel(it) }
+                .filter { modelManagerViewModel.uiState.value.modelDownloadStatus[it.name]?.status == com.google.ai.edge.gallery.data.ModelDownloadStatusType.SUCCEEDED }
+            
+            if (availableLLMs.isEmpty()) {
+                errorMessage = "Nutrition analysis requires an AI model to be downloaded. Please download an AI model (like LoRa-3n-DDX-ft-int4) from the model manager first."
+                return
+            }
+            
+            // Use the first available LLM model for processing
+            val llmModel = availableLLMs.first()
+            Log.d(TAG, "Using LLM model: ${llmModel.name} for nutrition workflow")
+            
+            // Continue with nutrition workflow using the available LLM
+            processNutritionWorkflow(
+                context, cattleType, targetWeight, bodyWeight, averageDailyGain,
+                modelManagerViewModel, llmModel
+            )
+            return
+        }
+        
         // Add loading result immediately
         val loadingResult = CattleAdvisorResult(
             recommendation = "",
@@ -115,90 +140,60 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
         
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                // Check if this is the nutrition model
-                if (NutritionModelFactory.isNutritionModel(model)) {
-                    // Use pure nutrition analysis without AI enhancement
-                    val analysisResult = nutritionService.getNutritionAnalysis(
-                        cattleType = cattleType,
-                        targetWeight = targetWeight,
-                        bodyWeight = bodyWeight,
-                        averageDailyGain = averageDailyGain
-                    )
-                    
-                    when (analysisResult) {
-                        is CattleNutritionService.NutritionAnalysisResult.Success -> {
+                // For non-nutrition models, use AI model with optional nutrition enhancement
+                val analysisResult = nutritionService.getNutritionAnalysis(
+                    cattleType = cattleType,
+                    targetWeight = targetWeight,
+                    bodyWeight = bodyWeight,
+                    averageDailyGain = averageDailyGain
+                )
+                
+                when (analysisResult) {
+                    is CattleNutritionService.NutritionAnalysisResult.Success -> {
+                        val baseRecommendation = analysisResult.formattedAnalysis
+                        
+                        if (useAIEnhancement && model.instance != null) {
+                            // Enhance with AI model for additional insights
+                            enhanceWithAI(
+                                context = context,
+                                baseRecommendation = baseRecommendation,
+                                cattleType = cattleType,
+                                targetWeight = targetWeight,
+                                bodyWeight = bodyWeight,
+                                averageDailyGain = averageDailyGain,
+                                modelManagerViewModel = modelManagerViewModel,
+                                model = model
+                            )
+                        } else {
+                            // Use only the nutrition model results
                             updateAnalysisResult(
                                 cattleType = cattleType,
                                 targetWeight = targetWeight,
                                 bodyWeight = bodyWeight,
                                 averageDailyGain = averageDailyGain,
-                                recommendation = analysisResult.formattedAnalysis,
+                                recommendation = baseRecommendation,
                                 isLoading = false
                             )
                             isAnalyzing = false
                         }
-                        is CattleNutritionService.NutritionAnalysisResult.Error -> {
+                    }
+                    is CattleNutritionService.NutritionAnalysisResult.Error -> {
+                        // Fallback to AI-only analysis if nutrition service fails
+                        if (useAIEnhancement && model.instance != null) {
+                            enhanceWithAI(
+                                context = context,
+                                baseRecommendation = "",
+                                cattleType = cattleType,
+                                targetWeight = targetWeight,
+                                bodyWeight = bodyWeight,
+                                averageDailyGain = averageDailyGain,
+                                modelManagerViewModel = modelManagerViewModel,
+                                model = model
+                            )
+                        } else {
                             removeLoadingResult(cattleType, targetWeight, bodyWeight, averageDailyGain)
                             errorMessage = analysisResult.message
                             isAnalyzing = false
-                        }
-                    }
-                } else {
-                    // Use AI model with optional nutrition enhancement
-                    val analysisResult = nutritionService.getNutritionAnalysis(
-                        cattleType = cattleType,
-                        targetWeight = targetWeight,
-                        bodyWeight = bodyWeight,
-                        averageDailyGain = averageDailyGain
-                    )
-                    
-                    when (analysisResult) {
-                        is CattleNutritionService.NutritionAnalysisResult.Success -> {
-                            val baseRecommendation = analysisResult.formattedAnalysis
-                            
-                            if (useAIEnhancement && model.instance != null) {
-                                // Enhance with AI model for additional insights
-                                enhanceWithAI(
-                                    context = context,
-                                    baseRecommendation = baseRecommendation,
-                                    cattleType = cattleType,
-                                    targetWeight = targetWeight,
-                                    bodyWeight = bodyWeight,
-                                    averageDailyGain = averageDailyGain,
-                                    modelManagerViewModel = modelManagerViewModel,
-                                    model = model
-                                )
-                            } else {
-                                // Use only the nutrition model results
-                                updateAnalysisResult(
-                                    cattleType = cattleType,
-                                    targetWeight = targetWeight,
-                                    bodyWeight = bodyWeight,
-                                    averageDailyGain = averageDailyGain,
-                                    recommendation = baseRecommendation,
-                                    isLoading = false
-                                )
-                                isAnalyzing = false
-                            }
-                        }
-                        is CattleNutritionService.NutritionAnalysisResult.Error -> {
-                            // Fallback to AI-only analysis if nutrition service fails
-                            if (useAIEnhancement && model.instance != null) {
-                                enhanceWithAI(
-                                    context = context,
-                                    baseRecommendation = "",
-                                    cattleType = cattleType,
-                                    targetWeight = targetWeight,
-                                    bodyWeight = bodyWeight,
-                                    averageDailyGain = averageDailyGain,
-                                    modelManagerViewModel = modelManagerViewModel,
-                                    model = model
-                                )
-                            } else {
-                                removeLoadingResult(cattleType, targetWeight, bodyWeight, averageDailyGain)
-                                errorMessage = analysisResult.message
-                                isAnalyzing = false
-                            }
                         }
                     }
                 }
@@ -211,6 +206,74 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
         }
     }
     
+    private fun processNutritionWorkflow(
+        context: Context,
+        cattleType: String,
+        targetWeight: Double,
+        bodyWeight: Double,
+        averageDailyGain: Double,
+        modelManagerViewModel: ModelManagerViewModel,
+        llmModel: Model
+    ) {
+        // Add loading result immediately
+        val loadingResult = CattleAdvisorResult(
+            recommendation = "",
+            cattleType = cattleType,
+            targetWeight = targetWeight,
+            bodyWeight = bodyWeight,
+            averageDailyGain = averageDailyGain,
+            isLoading = true
+        )
+        _analysisResults.add(loadingResult)
+        
+        isAnalyzing = true
+        
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // Step 1: Get nutrition predictions only
+                val nutritionPrediction = nutritionService.getNutritionPrediction(
+                    cattleType = cattleType,
+                    targetWeight = targetWeight,
+                    bodyWeight = bodyWeight,
+                    averageDailyGain = averageDailyGain
+                )
+                
+                if (nutritionPrediction != null) {
+                    // Step 2: Generate LLM prompt with nutrition requirements and ingredients
+                    val feedPrompt = nutritionService.generateFeedRecommendationPrompt(
+                        prediction = nutritionPrediction,
+                        unavailableIngredients = emptyList()
+                    )
+                    
+                    Log.d(TAG, "Generated feed prompt for LLM processing")
+                    Log.d(TAG, "Prompt preview: ${feedPrompt.take(200)}...")
+                    
+                    // Step 3: Send prompt to LLM model for feed recommendations
+                    enhanceWithAI(
+                        context = context,
+                        baseRecommendation = feedPrompt,
+                        cattleType = cattleType,
+                        targetWeight = targetWeight,
+                        bodyWeight = bodyWeight,
+                        averageDailyGain = averageDailyGain,
+                        modelManagerViewModel = modelManagerViewModel,
+                        model = llmModel, // Use the selected LLM model
+                        isNutritionWorkflow = true
+                    )
+                } else {
+                    removeLoadingResult(cattleType, targetWeight, bodyWeight, averageDailyGain)
+                    errorMessage = "Failed to get nutrition predictions"
+                    isAnalyzing = false
+                }
+            } catch (e: Exception) {
+                removeLoadingResult(cattleType, targetWeight, bodyWeight, averageDailyGain)
+                isAnalyzing = false
+                errorMessage = "Nutrition workflow failed: ${e.message}"
+                Log.e(TAG, "Nutrition workflow exception", e)
+            }
+        }
+    }
+    
     private suspend fun enhanceWithAI(
         context: Context,
         baseRecommendation: String,
@@ -219,7 +282,8 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
         bodyWeight: Double,
         averageDailyGain: Double,
         modelManagerViewModel: ModelManagerViewModel,
-        model: Model
+        model: Model,
+        isNutritionWorkflow: Boolean = false
     ) {
         try {
             // Initialize the AI model if it's not already initialized
@@ -236,25 +300,40 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
                 }
             }
             
-            // Create enhanced prompt that includes the nutrition analysis
-            val enhancedPrompt = createEnhancedPrompt(
-                baseRecommendation = baseRecommendation,
-                cattleType = cattleType,
-                targetWeight = targetWeight,
-                bodyWeight = bodyWeight,
-                averageDailyGain = averageDailyGain
-            )
+            // Create enhanced prompt based on workflow type
+            val promptToSend = if (isNutritionWorkflow) {
+                // For nutrition workflow, send the generated prompt directly to LLM
+                baseRecommendation
+            } else {
+                // For regular workflow, enhance the base recommendation
+                createEnhancedPrompt(
+                    baseRecommendation = baseRecommendation,
+                    cattleType = cattleType,
+                    targetWeight = targetWeight,
+                    bodyWeight = bodyWeight,
+                    averageDailyGain = averageDailyGain
+                )
+            }
             
-            Log.d(TAG, "Sending enhanced prompt to AI model")
+            Log.d(TAG, "Sending ${if (isNutritionWorkflow) "nutrition" else "enhanced"} prompt to AI model")
+            Log.d(TAG, "Prompt length: ${promptToSend.length} characters")
+            Log.d(TAG, "Model instance available: ${model.instance != null}")
 
             LlmChatModelHelper.runInference(
                 model = model,
-                input = enhancedPrompt,
+                input = promptToSend,
                 resultListener = { partialResult, done ->
-                    // Update the loading result with AI-enhanced response
-                    val combinedRecommendation = if (done) {
-                        baseRecommendation + "\n\n## AI-Enhanced Insights\n\n" + partialResult
+                    Log.d(TAG, "LLM Response - Done: $done, Length: ${partialResult.length}")
+                    
+                    val finalRecommendation = if (isNutritionWorkflow) {
+                        // For nutrition workflow, show only the LLM response
+                        if (partialResult.trim().isEmpty()) {
+                            "LLM processing... (No response yet)"
+                        } else {
+                            partialResult
+                        }
                     } else {
+                        // For regular workflow, combine base + AI enhancement
                         baseRecommendation + "\n\n## AI-Enhanced Insights\n\n" + partialResult
                     }
                     
@@ -263,7 +342,7 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
                         targetWeight = targetWeight,
                         bodyWeight = bodyWeight,
                         averageDailyGain = averageDailyGain,
-                        recommendation = combinedRecommendation,
+                        recommendation = finalRecommendation,
                         isLoading = !done
                     )
                     
@@ -273,21 +352,29 @@ class CattleAdvisorViewModel @Inject constructor() : ViewModel() {
                     }
                 },
                 cleanUpListener = {
+                    Log.d(TAG, "LLM inference cleanup called")
                     isAnalyzing = false
                 }
             )
         } catch (e: Exception) {
-            // Fallback to base recommendation if AI enhancement fails
+            Log.e(TAG, "Error during LLM inference", e)
+            
+            // Fallback handling based on workflow type
+            val fallbackMessage = if (isNutritionWorkflow) {
+                "Feed recommendation generation failed. Error: ${e.message}\n\nThe nutrition model predictions were successful, but the AI model couldn't process the feed recommendations. Please ensure the AI model is properly downloaded and try again."
+            } else {
+                baseRecommendation + "\n\n*Note: AI enhancement unavailable due to error: ${e.message}*"
+            }
+            
             updateAnalysisResult(
                 cattleType = cattleType,
                 targetWeight = targetWeight,
                 bodyWeight = bodyWeight,
                 averageDailyGain = averageDailyGain,
-                recommendation = baseRecommendation + "\n\n*Note: AI enhancement unavailable*",
+                recommendation = fallbackMessage,
                 isLoading = false
             )
             isAnalyzing = false
-            Log.w(TAG, "AI enhancement failed, using base recommendation", e)
         }
     }
     
