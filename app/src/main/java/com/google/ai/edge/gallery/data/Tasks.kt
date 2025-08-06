@@ -20,6 +20,7 @@ import androidx.annotation.StringRes
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.Functions
+import androidx.compose.material.icons.outlined.HealthAndSafety
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Mms
 import androidx.compose.material.icons.outlined.Pets
@@ -103,7 +104,7 @@ val TASK_LLM_PROMPT_LAB =
 val TASK_LLM_ASK_IMAGE =
   Task(
     type = TaskType.LLM_ASK_IMAGE,
-    icon = Icons.Outlined.Mms,
+    icon = Icons.Outlined.HealthAndSafety,
     models = mutableListOf(),
     description = "Ask questions about disease symptoms and medical images with AI-powered LoRa models",
     docUrl = "https://ai.google.dev/edge/mediapipe/solutions/genai/llm_inference/android",
@@ -164,7 +165,7 @@ val TASK_LLM_CATTLE_ADVISOR =
 
 /** All tasks. */
 val TASKS: List<Task> =
-  listOf(TASK_LLM_ASK_IMAGE, TASK_LLM_FUNCTION_CALLING, TASK_LLM_DISEASE_SCANNING, TASK_LLM_CATTLE_ADVISOR)
+  listOf(TASK_LLM_ASK_IMAGE, TASK_LLM_CATTLE_ADVISOR)
 
 fun getModelByName(name: String): Model? {
   for (task in TASKS) {

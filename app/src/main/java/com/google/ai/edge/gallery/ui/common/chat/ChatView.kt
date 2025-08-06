@@ -197,20 +197,6 @@ fun ChatView(
         },
       )
     },
-    floatingActionButton = {
-      // Show Disease Scanning FAB only for Ask Image task
-      if (task.type == TaskType.LLM_ASK_IMAGE) {
-        FloatingActionButton(
-          onClick = navigateToDiseaseScan,
-          modifier = Modifier.padding(16.dp)
-        ) {
-          Icon(
-            imageVector = Icons.Rounded.MedicalServices,
-            contentDescription = "Disease Scanning"
-          )
-        }
-      }
-    },
   ) { innerPadding ->
     Box {
       // A horizontal scrollable pager to switch between models.
